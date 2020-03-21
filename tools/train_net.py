@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 """
 Detection Training Script.
@@ -40,10 +41,11 @@ from detectron2.modeling import GeneralizedRCNNWithTTA
 
 class Trainer(DefaultTrainer):
     """
-    We use the "DefaultTrainer" which contains a number pre-defined logic for
+    We use the "DefaultTrainer" which contains pre-defined default logic for
     standard training workflow. They may not work for you, especially if you
     are working on a new research project. In that case you can use the cleaner
-    "SimpleTrainer", or write your own training loop.
+    "SimpleTrainer", or write your own training loop. You can use
+    "tools/plain_train_net.py" as an example.
     """
 
     @classmethod
@@ -130,10 +132,10 @@ def main(args):
             cfg.MODEL.WEIGHTS, resume=args.resume
         )
         res = Trainer.test(cfg, model)
-        if comm.is_main_process():
-            verify_results(cfg, res)
         if cfg.TEST.AUG.ENABLED:
             res.update(Trainer.test_with_TTA(cfg, model))
+        if comm.is_main_process():
+            verify_results(cfg, res)
         return res
 
     """

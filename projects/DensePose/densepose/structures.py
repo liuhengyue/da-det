@@ -152,14 +152,15 @@ class DensePoseDataRelative(object):
             self.x = self.segm.size(1) - self.x
             self._flip_iuv_semantics(dp_transform_data)
 
-    def _flip_iuv_semantics(self, dp_transform_data):
+    def _flip_iuv_semantics(self, dp_transform_data: DensePoseTransformData) -> None:
         i_old = self.i.clone()
         uv_symmetries = dp_transform_data.uv_symmetries
         pt_label_symmetries = dp_transform_data.point_label_symmetries
         for i in range(self.N_PART_LABELS):
-            if pt_label_symmetries[i + 1] != i + 1:
+            if i + 1 in i_old:
                 annot_indices_i = i_old == i + 1
-                self.i[annot_indices_i] = pt_label_symmetries[i + 1]
+                if pt_label_symmetries[i + 1] != i + 1:
+                    self.i[annot_indices_i] = pt_label_symmetries[i + 1]
                 u_loc = (self.u[annot_indices_i] * 255).long()
                 v_loc = (self.v[annot_indices_i] * 255).long()
                 self.u[annot_indices_i] = uv_symmetries["U_transforms"][i][v_loc, u_loc]
@@ -196,11 +197,20 @@ def normalized_coords_transform(x0, y0, w, h):
 
 
 class DensePoseOutput(object):
-    def __init__(self, S, I, U, V):
+    def __init__(self, S, I, U, V, confidences):
+        """
+        Args:
+            S (`torch.Tensor`): coarse segmentation tensor of size (N, A, H, W)
+            I (`torch.Tensor`): fine segmentation tensor of size (N, C, H, W)
+            U (`torch.Tensor`): U coordinates for each fine segmentation label of size (N, C, H, W)
+            V (`torch.Tensor`): V coordinates for each fine segmentation label of size (N, C, H, W)
+            confidences (dict of str -> `torch.Tensor`) estimated confidence model parameters
+        """
         self.S = S
         self.I = I  # noqa: E741
         self.U = U
         self.V = V
+        self.confidences = confidences
         self._check_output_dims(S, I, U, V)
 
     def _check_output_dims(self, S, I, U, V):
@@ -334,18 +344,27 @@ class DensePoseOutput(object):
             I_selected = self.I[item].unsqueeze(0)
             U_selected = self.U[item].unsqueeze(0)
             V_selected = self.V[item].unsqueeze(0)
+            conf_selected = {}
+            for key in self.confidences:
+                conf_selected[key] = self.confidences[key][item].unsqueeze(0)
         else:
             S_selected = self.S[item]
             I_selected = self.I[item]
             U_selected = self.U[item]
             V_selected = self.V[item]
-        return DensePoseOutput(S_selected, I_selected, U_selected, V_selected)
+            conf_selected = {}
+            for key in self.confidences:
+                conf_selected[key] = self.confidences[key][item]
+        return DensePoseOutput(S_selected, I_selected, U_selected, V_selected, conf_selected)
 
     def __str__(self):
         s = "DensePoseOutput S {}, I {}, U {}, V {}".format(
             list(self.S.size()), list(self.I.size()), list(self.U.size()), list(self.V.size())
         )
-        return s
+        s_conf = "confidences: [{}]".format(
+            ", ".join([f"{key} {list(self.confidences[key].size())}" for key in self.confidences])
+        )
+        return ", ".join([s, s_conf])
 
     def __len__(self):
         return self.S.size(0)

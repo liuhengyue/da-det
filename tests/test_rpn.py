@@ -6,6 +6,7 @@ import torch
 from detectron2.config import get_cfg
 from detectron2.modeling.backbone import build_backbone
 from detectron2.modeling.proposal_generator.build import build_proposal_generator
+from detectron2.modeling.proposal_generator.rpn_outputs import find_top_rpn_proposals
 from detectron2.structures import Boxes, ImageList, Instances, RotatedBoxes
 from detectron2.utils.events import EventStorage
 
@@ -41,7 +42,7 @@ class RPNTest(unittest.TestCase):
             "loss_rpn_loc": torch.tensor(0.0990132466),
         }
         for name in expected_losses.keys():
-            assert torch.allclose(proposal_losses[name], expected_losses[name])
+            self.assertTrue(torch.allclose(proposal_losses[name], expected_losses[name]))
 
         expected_proposal_boxes = [
             Boxes(torch.tensor([[0, 0, 10, 10], [7.3365392685, 0, 10, 10]])),
@@ -63,13 +64,15 @@ class RPNTest(unittest.TestCase):
             torch.tensor([0.1415634006, 0.0989848152, 0.0565387346, -0.0072308783, -0.0428492837]),
         ]
 
-        for i in range(len(image_sizes)):
-            assert len(proposals[i]) == len(expected_proposal_boxes[i])
-            assert proposals[i].image_size == (image_sizes[i][0], image_sizes[i][1])
-            assert torch.allclose(
-                proposals[i].proposal_boxes.tensor, expected_proposal_boxes[i].tensor
+        for proposal, expected_proposal_box, im_size, expected_objectness_logit in zip(
+            proposals, expected_proposal_boxes, image_sizes, expected_objectness_logits
+        ):
+            self.assertEqual(len(proposal), len(expected_proposal_box))
+            self.assertEqual(proposal.image_size, im_size)
+            self.assertTrue(
+                torch.allclose(proposal.proposal_boxes.tensor, expected_proposal_box.tensor)
             )
-            assert torch.allclose(proposals[i].objectness_logits, expected_objectness_logits[i])
+            self.assertTrue(torch.allclose(proposal.objectness_logits, expected_objectness_logit))
 
     def test_rrpn(self):
         torch.manual_seed(121)
@@ -103,7 +106,7 @@ class RPNTest(unittest.TestCase):
             "loss_rpn_loc": torch.tensor(0.1552739739),
         }
         for name in expected_losses.keys():
-            assert torch.allclose(proposal_losses[name], expected_losses[name])
+            self.assertTrue(torch.allclose(proposal_losses[name], expected_losses[name]))
 
         expected_proposal_boxes = [
             RotatedBoxes(
@@ -185,25 +188,40 @@ class RPNTest(unittest.TestCase):
 
         torch.set_printoptions(precision=8, sci_mode=False)
 
-        for i in range(len(image_sizes)):
-            assert len(proposals[i]) == len(expected_proposal_boxes[i])
-            assert proposals[i].image_size == (image_sizes[i][0], image_sizes[i][1])
+        for proposal, expected_proposal_box, im_size, expected_objectness_logit in zip(
+            proposals, expected_proposal_boxes, image_sizes, expected_objectness_logits
+        ):
+            self.assertEqual(len(proposal), len(expected_proposal_box))
+            self.assertEqual(proposal.image_size, im_size)
             # It seems that there's some randomness in the result across different machines:
             # This test can be run on a local machine for 100 times with exactly the same result,
             # However, a different machine might produce slightly different results,
             # thus the atol here.
             err_msg = "computed proposal boxes = {}, expected {}".format(
-                proposals[i].proposal_boxes.tensor, expected_proposal_boxes[i].tensor
+                proposal.proposal_boxes.tensor, expected_proposal_box.tensor
             )
-            assert torch.allclose(
-                proposals[i].proposal_boxes.tensor, expected_proposal_boxes[i].tensor, atol=1e-5
-            ), err_msg
+            self.assertTrue(
+                torch.allclose(
+                    proposal.proposal_boxes.tensor, expected_proposal_box.tensor, atol=1e-5
+                ),
+                err_msg,
+            )
+
             err_msg = "computed objectness logits = {}, expected {}".format(
-                proposals[i].objectness_logits, expected_objectness_logits[i]
+                proposal.objectness_logits, expected_objectness_logit
             )
-            assert torch.allclose(
-                proposals[i].objectness_logits, expected_objectness_logits[i], atol=1e-5
-            ), err_msg
+            self.assertTrue(
+                torch.allclose(proposal.objectness_logits, expected_objectness_logit, atol=1e-5),
+                err_msg,
+            )
+
+    def test_rpn_proposals_inf(self):
+        N, Hi, Wi, A = 3, 3, 3, 3
+        proposals = [torch.rand(N, Hi * Wi * A, 4)]
+        pred_logits = [torch.rand(N, Hi * Wi * A)]
+        pred_logits[0][1][3:5].fill_(float("inf"))
+        images = ImageList.from_tensors([torch.rand(3, 10, 10)] * 3)
+        find_top_rpn_proposals(proposals, pred_logits, images, 0.5, 1000, 1000, 0, False)
 
 
 if __name__ == "__main__":

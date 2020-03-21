@@ -4,6 +4,7 @@ MODEL:
   KEYPOINT_ON: True
   ROI_KEYPOINT_HEAD:
     NUM_KEYPOINTS: 4
+  DEVICE: cpu
 DATASETS:
   TRAIN: ("jerseynumbers_train",)
   TEST: ("jerseynumbers_val",)
@@ -12,7 +13,7 @@ INPUT:
     ENABLED: False
     SIZE: [0.5, 0.9]
 SOLVER:
-  IMS_PER_BATCH: 6
+  IMS_PER_BATCH: 1
   BASE_LR: 0.0025
   STEPS: (60000, 80000)
   MAX_ITER: 10000

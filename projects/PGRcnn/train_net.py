@@ -66,7 +66,7 @@ def main(args):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.config_file = "./configs/pg_rcnn_r_50_FPN_1x.yaml"
+    args.config_file = "projects/PGRcnn/configs/pg_rcnn_r_50_FPN_1x.yaml"
     # print("Command Line Args:", args)
     launch(
         main,

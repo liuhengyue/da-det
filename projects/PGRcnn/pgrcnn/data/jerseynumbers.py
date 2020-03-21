@@ -83,7 +83,8 @@ def get_dicts(data_dir, anno_dir, split=None):
 
 def register_jerseynumbers():
     train_video_ids, test_video_ids = [0, 1, 2, 3], [4]
-    dataset_root = '../../datasets/jnw'
+    # dataset_root = '../../datasets/jnw'
+    dataset_root = 'datasets/jnw'
     dataset_dir =  os.path.join(dataset_root, 'total/')
     annotation_dir = os.path.join(dataset_root, 'annotations/processed_annotations.json')
     for name, d in zip(['train', 'val'], [train_video_ids, test_video_ids]):
@@ -91,18 +92,18 @@ def register_jerseynumbers():
         MetadataCatalog.get("jerseynumbers_" + name).set(thing_classes=CLASS_NAMES)
         MetadataCatalog.get("jerseynumbers_" + name).set(keypoint_names=KEYPOINT_NAMES)
 
-register_jerseynumbers()
 
 if __name__ == "__main__":
+    from pgrcnn.vis.visualization import JerseyNumberVisualizer
     dataset_root = 'datasets/jnw'
     dataset_dir = os.path.join(dataset_root, 'total/')
     annotation_dir = os.path.join(dataset_root, 'annotations/processed_annotations.json')
     # register_jerseynumbers()
-    dataset_dicts = get_dicts("jerseynumbers", annotation_dir, split=[0,1,2,3])
+    # dataset_dicts = get_dicts("jerseynumbers", annotation_dir, split=[0,1,2,3])
+    # register_jerseynumbers()
     dataset_dicts = DatasetCatalog.get("jerseynumbers_train")
     jnw_metadata = MetadataCatalog.get("jerseynumbers_train")
     import random, cv2
-    from projects.PGRcnn.pgrcnn.vis.visualization import JerseyNumberVisualizer
     for d in random.sample(dataset_dicts, 3):
         print(d['file_name'])
         img = cv2.imread(d["file_name"])
@@ -110,3 +111,5 @@ if __name__ == "__main__":
         vis = visualizer.draw_dataset_dict(d)
         cv2.imshow("example", vis.get_image()[:, :, ::-1])
         cv2.waitKey(0)
+else:
+    register_jerseynumbers()

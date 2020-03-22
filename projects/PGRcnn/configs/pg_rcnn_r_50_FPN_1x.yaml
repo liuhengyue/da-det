@@ -4,7 +4,8 @@ MODEL:
   KEYPOINT_ON: True
   ROI_KEYPOINT_HEAD:
     NUM_KEYPOINTS: 4
-  DEVICE: cpu
+  DEVICE: cpu # cpu or cuda
+  WEIGHTS: "./model_final_a6e10b.pkl" # "./model_final_280758.pkl"
 DATASETS:
   TRAIN: ("jerseynumbers_train",)
   TEST: ("jerseynumbers_val",)
@@ -21,4 +22,5 @@ DATALOADER:
   NUM_WORKERS: 4
 TEST:
   KEYPOINT_OKS_SIGMAS: [0.079, 0.079, 0.107, 0.107]
+VIS_PERIOD: 1
 VERSION: 2

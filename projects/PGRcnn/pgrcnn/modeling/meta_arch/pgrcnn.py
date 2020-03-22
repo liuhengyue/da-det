@@ -32,7 +32,8 @@ class PGRCNN(nn.Module):
 
         self.device = torch.device(cfg.MODEL.DEVICE)
         self.backbone = build_backbone(cfg)
-        self.proposal_generator = build_proposal_generator(cfg, self.backbone.output_shape())
+        self.generator = build_proposal_generator(cfg, self.backbone.output_shape())
+        self.proposal_generator = self.generator
         self.roi_heads = build_roi_heads(cfg, self.backbone.output_shape())
         self.vis_period = cfg.VIS_PERIOD
         self.input_format = cfg.INPUT.FORMAT
@@ -195,3 +196,22 @@ class PGRCNN(nn.Module):
         images = ImageList.from_tensors(images, self.backbone.size_divisibility)
         return images
 
+# network summary test
+if __name__ == "__main__":
+    from detectron2.engine import default_argument_parser
+    from detectron2.config import get_cfg
+    # from torchsummary import summary
+
+    args = default_argument_parser().parse_args()
+    # lazy add config file
+    args.config_file = "configs/pg_rcnn_r_50_FPN_1x.yaml"
+
+    cfg = get_cfg()
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
+    cfg.freeze()
+
+    net = PGRCNN(cfg)
+    print(net)
+    input = [{'image': torch.rand((3, 320, 320))}]
+    output = net(input)

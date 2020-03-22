@@ -9,7 +9,8 @@ inference_test_output
 *.txt
 *.json
 *.diff
-
+*.pkl
+*.DS_Store
 # compilation and distribution
 __pycache__
 _ext

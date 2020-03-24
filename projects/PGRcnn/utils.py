@@ -257,15 +257,10 @@ class VIAConverter:
         # assert each digit is matched
         all_inf = np.all(distances == float("inf"), axis=0)
         assert np.any(all_inf) == False, "not all digits are matched"
-        if self.filename == 'new_2365_2.png':
-            print(distances)
-            # print(all_inf)
         # print(distances)
         # ids_associated_by_center_distance = self.match_digit_box(distances)
         # for each digit, get the person id
         ids_associated_by_center_distance = np.argmin(distances, axis=0)
-        if self.filename == 'new_2365_2.png':
-            print(ids_associated_by_center_distance)
         # print(ids_associated_by_center_distance.shape)
         #        ids_associated_by_overlaps = np.argmax(overlaps, axis=0)
         associated_person = ids_associated_by_center_distance

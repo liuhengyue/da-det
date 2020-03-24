@@ -14,15 +14,26 @@ from fvcore.common.file_io import PathManager, file_lock
 
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
-
+from detectron2.data.datasets.builtin_meta import KEYPOINT_CONNECTION_RULES
 
 # fmt: off
 CLASS_NAMES = [
     'person', '0', '1', '2', '3', '4', '5',
     '6', '7', '8', '9'
 ]
-KEYPOINT_NAMES = ['ls', 'rs', 'rh', 'lh']
-# fmt: on
+KEYPOINT_NAMES = ["left_shoulder", "right_shoulder",
+                  "left_hip", "right_hip"] # follow the name in COCO
+
+KEYPOINT_CONNECTION_RULES = [
+    ("left_shoulder", "right_shoulder", (255, 128, 0)),
+    ("right_shoulder", "right_hip", (255, 128, 0)),
+    ("right_hip", "left_hip", (255, 128, 0)),
+    ("left_hip", "left_shoulder", (255, 128, 0)),
+]
+
+
+# fmt: off
+
 
 # The annotation format:
 # self.dataset:
@@ -30,6 +41,7 @@ KEYPOINT_NAMES = ['ls', 'rs', 'rh', 'lh']
 #   'keypoints': output_kpts, 'persons': persons, 'digits': output_digits,
 #   'digits_bboxes': output_digit_boxes, 'numbers': numbers, 'video_id': anno['file_attributes']['video_id']
 #   }]
+# the keypoints order is left_sholder, right_shoulder, right_hip, left_hip
 # Note: bbox annotation older is y1, x1, y2, x2, keypoints is x, y, v
 def _parse_bbox(old_bbox):
     if not old_bbox:
@@ -67,8 +79,15 @@ def get_dicts(data_dir, anno_dir, split=None):
             category_id = CLASS_NAMES.index('person')
             digit_ids   = [ CLASS_NAMES.index(digit) for digit in annotation['digits'][i]] if annotation['digits'][i] else []
             # normalize to 2-digit format paded with -1, if no annotation on the person, fill with [-1, -1]
-            digit_ids += [-1] * (2 - len(digit_ids))
+            digit_ids  += [-1] * (2 - len(digit_ids))
             keypoints   = [val for ann in annotation['keypoints'][i] if ann for val in ann]
+            # check if the order of keypoints is correct
+
+            # if keypoints[0] > keypoints[3] or keypoints[6] < keypoints[9]:
+            #     print(id)
+            assert keypoints[0] <= keypoints[3], "Left_shoulder and right_shoulder order reversed {}, keypoints list {}".format(annotation['filename'], keypoints)
+            assert keypoints[6] >= keypoints[9], "Left_hip and right_hip order reversed {}, keypoints list {}".format(
+                annotation['filename'], keypoints)
             anno_info.append(dict(person_bbox=person_bbox, bbox_mode=bbox_mode, category_id=category_id,
                                   digit_ids=digit_ids, digit_bbox=digit_bbox, keypoints=keypoints))
 
@@ -89,9 +108,15 @@ def register_jerseynumbers():
     annotation_dir = os.path.join(dataset_root, 'annotations/processed_annotations.json')
     for name, d in zip(['train', 'val'], [train_video_ids, test_video_ids]):
         DatasetCatalog.register("jerseynumbers_" + name, lambda d=d: get_dicts(dataset_dir, annotation_dir, d))
-        MetadataCatalog.get("jerseynumbers_" + name).set(thing_classes=CLASS_NAMES)
-        MetadataCatalog.get("jerseynumbers_" + name).set(keypoint_names=KEYPOINT_NAMES)
+        metadataCat = MetadataCatalog.get("jerseynumbers_" + name)
+        metadataCat.set(thing_classes=CLASS_NAMES)
+        metadataCat.set(keypoint_names=KEYPOINT_NAMES)
+        metadataCat.set(keypoint_connection_rules=KEYPOINT_CONNECTION_RULES)
 
+
+# dataset test
+VIS_DATASET = False
+NUM_IMAGE_SHOW = 3
 
 if __name__ == "__main__":
     from pgrcnn.vis.visualization import JerseyNumberVisualizer
@@ -104,12 +129,17 @@ if __name__ == "__main__":
     dataset_dicts = DatasetCatalog.get("jerseynumbers_train")
     jnw_metadata = MetadataCatalog.get("jerseynumbers_train")
     import random, cv2
-    for d in random.sample(dataset_dicts, 3):
-        print(d['file_name'])
-        img = cv2.imread(d["file_name"])
-        visualizer = JerseyNumberVisualizer(img[:, :, ::-1], metadata=jnw_metadata, scale=0.5)
-        vis = visualizer.draw_dataset_dict(d)
-        cv2.imshow("example", vis.get_image()[:, :, ::-1])
-        cv2.waitKey(0)
+    if VIS_DATASET:
+        for d in random.sample(dataset_dicts, NUM_IMAGE_SHOW):
+            print(os.path.abspath(d['file_name']))
+            img = cv2.imread(d["file_name"])
+            visualizer = JerseyNumberVisualizer(img[:, :, ::-1], metadata=jnw_metadata, scale=2)
+            vis = visualizer.draw_dataset_dict(d)
+            winname = "example"
+            cv2.namedWindow(winname)  # Create a named window
+            cv2.moveWindow(winname, -1000, 500)  # Move it the main monitor if you have two monitors
+            cv2.imshow(winname, vis.get_image()[:, :, ::-1])
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 else:
     register_jerseynumbers()

@@ -4,7 +4,7 @@ MODEL:
   KEYPOINT_ON: True
   ROI_KEYPOINT_HEAD:
     NUM_KEYPOINTS: 4
-  DEVICE: cpu # cpu or cuda
+  DEVICE: cuda # cpu or cuda
   WEIGHTS: "./model_final_a6e10b.pkl" # "./model_final_280758.pkl"
 DATASETS:
   TRAIN: ("jerseynumbers_train",)

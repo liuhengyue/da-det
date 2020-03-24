@@ -212,6 +212,9 @@ if __name__ == "__main__":
     cfg.freeze()
 
     net = PGRCNN(cfg)
+    net.eval()
     print(net)
+    # check inference
     input = [{'image': torch.rand((3, 320, 320))}]
-    output = net(input)
+    output = net.inference(input)
+    print(output)

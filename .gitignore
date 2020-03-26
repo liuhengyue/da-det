@@ -7,7 +7,6 @@ inference_test_output
 *.jpg
 *.png
 *.txt
-*.json
 *.diff
 *.pkl
 *.DS_Store
@@ -42,6 +41,11 @@ wheels/
 
 # project dirs
 /detectron2/model_zoo/configs
-/datasets
-/projects/*/datasets
+#/datasets/coco/
+#/projects/*/datasets
+!datasets/
+datasets/*
+!datasets/jnw/
+datasets/jnw/*
+!/datasets/jnw/annotations/
 /models

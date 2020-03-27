@@ -49,3 +49,7 @@ datasets/*
 datasets/jnw/*
 !/datasets/jnw/annotations/
 /models
+
+# pycharm plugins
+node_modules/
+package-lock.json

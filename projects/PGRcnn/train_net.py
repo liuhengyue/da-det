@@ -1,3 +1,4 @@
+import platform
 from detectron2.engine import DefaultTrainer
 from detectron2.config import get_cfg
 from detectron2.data import build_detection_test_loader, build_detection_train_loader
@@ -28,9 +29,12 @@ def setup(args):
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+    # for mac os, change config to cpu
+    if platform.system() == 'Darwin':
+        cfg.MODEL.DEVICE = 'cpu'
     cfg.freeze()
     default_setup(cfg, args)
-    # Setup logger for "densepose" module
+    # Setup logger for "pgrcnn" module
     setup_logger(output=cfg.OUTPUT_DIR, distributed_rank=comm.get_rank(), name="pgrcnn")
     return cfg
 
@@ -67,6 +71,8 @@ if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
     args.config_file = "projects/PGRcnn/configs/pg_rcnn_r_50_FPN_1x.yaml"
+
+
     # print("Command Line Args:", args)
     launch(
         main,

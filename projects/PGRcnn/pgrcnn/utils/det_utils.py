@@ -157,9 +157,9 @@ def transform_instance_annotations(
     # Note that bbox is 1d (per-instance bounding box)
     annotation["person_bbox"] = transforms.apply_box([bbox])[0]
     annotation["bbox_mode"] = BoxMode.XYXY_ABS
-    bbox = BoxMode.convert(annotation["digit_bbox"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
+    bbox = BoxMode.convert(annotation["digit_bboxes"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
     # Note that bbox is 1d (per-instance bounding box)
-    annotation["digit_bbox"] = transforms.apply_box(bbox)
+    annotation["digit_bboxes"] = transforms.apply_box(bbox)
 
     if "segmentation" in annotation:
         # each instance contains 1 or more polygons
@@ -247,7 +247,7 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
     boxes = target.gt_boxes = Boxes(boxes)
     boxes.clip(image_size)
     # digit bbox list of [[],[]]
-    boxes = [[BoxMode.convert(_obj, obj["bbox_mode"], BoxMode.XYXY_ABS) for _obj in obj["digit_bbox"]] for obj in annos]
+    boxes = [[BoxMode.convert(_obj, obj["bbox_mode"], BoxMode.XYXY_ABS) for _obj in obj["digit_bboxes"]] for obj in annos]
     # for obj in annos:
     #     print(obj["digit_bbox"])
     # print(boxes)

@@ -73,11 +73,12 @@ class DatasetMapper:
             dict: a format that builtin models in detectron2 accept
         """
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
+
         # USER: Write your own image loading if it's not from a file
-        image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
+        image = utils.read_image(dataset_dict["filename"], format=self.img_format)
         utils.check_image_size(dataset_dict, image)
 
-        if "annotations" not in dataset_dict:
+        if "instances" not in dataset_dict:
             image, transforms = T.apply_transform_gens(
                 ([self.crop_gen] if self.crop_gen else []) + self.tfm_gens, image
             )
@@ -88,7 +89,7 @@ class DatasetMapper:
                 crop_tfm = utils.gen_crop_transform_with_instance(
                     self.crop_gen.get_crop_size(image.shape[:2]),
                     image.shape[:2],
-                    np.random.choice(dataset_dict["annotations"]),
+                    np.random.choice(dataset_dict["instances"]),
                 )
                 image = crop_tfm.apply_image(image)
             image, transforms = T.apply_transform_gens(self.tfm_gens, image)
@@ -112,13 +113,13 @@ class DatasetMapper:
             )
 
         if not self.is_train:
-            dataset_dict.pop("annotations", None)
+            dataset_dict.pop("instances", None)
             dataset_dict.pop("sem_seg_file_name", None)
             return dataset_dict
 
-        if "annotations" in dataset_dict:
+        if "instances" in dataset_dict:
             # USER: Modify this if you want to keep them for some reason.
-            for anno in dataset_dict["annotations"]:
+            for anno in dataset_dict["instances"]:
                 if not self.mask_on:
                     anno.pop("segmentation", None)
                 if not self.keypoint_on:
@@ -129,7 +130,7 @@ class DatasetMapper:
                 utils.transform_instance_annotations(
                     obj, transforms, image_shape, keypoint_hflip_indices=self.keypoint_hflip_indices
                 )
-                for obj in dataset_dict.pop("annotations")
+                for obj in dataset_dict.pop("instances")
                 if obj.get("iscrowd", 0) == 0
             ]
             instances = utils.annotations_to_instances(

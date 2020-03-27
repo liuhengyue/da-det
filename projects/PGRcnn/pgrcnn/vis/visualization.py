@@ -38,6 +38,43 @@ class JerseyNumberVisualizer(Visualizer):
     def __init__(self, img_rgb, metadata, scale=1.0, instance_mode=ColorMode.IMAGE):
         super().__init__(img_rgb, metadata, scale=scale, instance_mode=instance_mode)
 
+    def draw_single_instance(self, instance):
+        """
+        Given a instance dict, draw the corresponding
+        person bbox, keypoints(if available), and digit bounding boxes (if available)
+
+        instance has four fields: digit_bboxes, digit_labels, person_bbox, keypoints
+        """
+        if instance is not None:
+            person_bbox = instance.get("person_bbox", None)
+            keypoints   = instance.get("keypoints", None)
+            digit_bboxes = instance.get("digit_bboxes", None)
+            digit_ids = instance.get("digit_ids", [])
+            category_id = instance.get("category_id", None)
+            bbox_mode = instance.get("bbox_mode", None)
+
+            keypts = np.array(keypoints).reshape(1, -1, 3) if keypoints else None
+
+            # here, we have two different bbox (person and digit)
+            person_bbox = [BoxMode.convert(person_bbox, bbox_mode, BoxMode.XYXY_ABS)]
+            digit_bboxes = [BoxMode.convert(each_digit_bbox, bbox_mode, BoxMode.XYXY_ABS) for
+                           each_digit_bbox in digit_bboxes]
+            # person labels, digit labels
+            labels = [category_id]
+            names = self.metadata.get("thing_classes", None)
+            # not too necessary
+            if names:
+                labels = [names[i] for i in labels]
+                digit_labels = [names[i] for i in digit_ids]
+
+            self.overlay_instances(labels=labels, boxes=person_bbox, masks=None, keypoints=keypts)
+            self.overlay_instances(labels=digit_labels, boxes=digit_bboxes, masks=None, keypoints=None)
+            return self.output
+
+
+
+
+
     def draw_dataset_dict(self, dic):
         """
         Draw annotations/segmentaions in Detectron2 Dataset format. With my customization for jersey number dataset.
@@ -48,40 +85,10 @@ class JerseyNumberVisualizer(Visualizer):
         Returns:
             output (VisImage): image object with visualizations.
         """
-        annos = dic.get("annotations", None)
+        annos = dic.get("instances", None)
         if annos:
-            if "segmentation" in annos[0]:
-                masks = [x["segmentation"] for x in annos]
-            else:
-                masks = None
-            if "keypoints" in annos[0]:
-                keypts = [x["keypoints"] for x in annos]
-                keypts = np.array(keypts).reshape(len(annos), -1, 3)
-            else:
-                keypts = None
-
-            # here, we have two different bbox (person and digit)
-            person_boxes = [BoxMode.convert(x["person_bbox"], x["bbox_mode"], BoxMode.XYXY_ABS) for x in annos]
-            digit_boxes = [BoxMode.convert(each_digit_bbox, x["bbox_mode"], BoxMode.XYXY_ABS) for x in annos for each_digit_bbox in x["digit_bbox"]]
-            # person labels, digit labels
-            labels = [x["category_id"] for x in annos]
-            digit_labels = [digit_id for x in annos for digit_id in x["digit_ids"]]
-            names = self.metadata.get("thing_classes", None)
-            if names:
-                labels = [names[i] for i in labels]
-                digit_labels = [names[i] for i in digit_labels]
-            labels = [
-                "{}".format(i) + ("|crowd" if a.get("iscrowd", 0) else "")
-                for i, a in zip(labels, annos)
-            ]
-            self.overlay_instances(labels=labels, boxes=person_boxes, masks=masks, keypoints=keypts)
-            self.overlay_instances(labels=digit_labels, boxes=digit_boxes, masks=None, keypoints=None)
-
-        sem_seg = dic.get("sem_seg", None)
-        if sem_seg is None and "sem_seg_file_name" in dic:
-            sem_seg = cv2.imread(dic["sem_seg_file_name"], cv2.IMREAD_GRAYSCALE)
-        if sem_seg is not None:
-            self.draw_sem_seg(sem_seg, area_threshold=0, alpha=0.5)
+            for anno in annos:
+                self.draw_single_instance(anno)
         return self.output
 
     def overlay_instances(
@@ -274,7 +281,7 @@ class JerseyNumberVisualizer(Visualizer):
 
         return self.output
 
-    def draw_and_connect_keypoints(self, keypoints, color=_RED):
+    def draw_and_connect_keypoints(self, keypoints, color=_RED, draw_mid=False):
         """
         Draws keypoints of an instance and follows the rules for keypoint connections
         to draw lines between appropriate keypoints. This follows color heuristics for
@@ -298,6 +305,7 @@ class JerseyNumberVisualizer(Visualizer):
                     keypoint_name = keypoint_names[idx]
                     visible[keypoint_name] = (x, y)
 
+
         if self.metadata.get("keypoint_connection_rules"):
             for kp0, kp1, color in self.metadata.keypoint_connection_rules:
                 if kp0 in visible and kp1 in visible:
@@ -309,27 +317,28 @@ class JerseyNumberVisualizer(Visualizer):
         # draw lines from nose to mid-shoulder and mid-shoulder to mid-hip
         # Note that this strategy is specific to person keypoints.
         # For other keypoints, it should just do nothing
-        try:
-            ls_x, ls_y = visible["left_shoulder"]
-            rs_x, rs_y = visible["right_shoulder"]
-            mid_shoulder_x, mid_shoulder_y = (ls_x + rs_x) / 2, (ls_y + rs_y) / 2
-        except KeyError:
-            pass
-        else:
-            # draw line from nose to mid-shoulder
-            nose_x, nose_y = visible.get("nose", (None, None))
-            if nose_x is not None:
-                self.draw_line([nose_x, mid_shoulder_x], [nose_y, mid_shoulder_y], color=_RED)
-
+        if draw_mid:
             try:
-                # draw line from mid-shoulder to mid-hip
-                lh_x, lh_y = visible["left_hip"]
-                rh_x, rh_y = visible["right_hip"]
+                ls_x, ls_y = visible["left_shoulder"]
+                rs_x, rs_y = visible["right_shoulder"]
+                mid_shoulder_x, mid_shoulder_y = (ls_x + rs_x) / 2, (ls_y + rs_y) / 2
             except KeyError:
                 pass
             else:
-                mid_hip_x, mid_hip_y = (lh_x + rh_x) / 2, (lh_y + rh_y) / 2
-                self.draw_line([mid_hip_x, mid_shoulder_x], [mid_hip_y, mid_shoulder_y], color=_RED)
+                # draw line from nose to mid-shoulder
+                nose_x, nose_y = visible.get("nose", (None, None))
+                if nose_x is not None:
+                    self.draw_line([nose_x, mid_shoulder_x], [nose_y, mid_shoulder_y], color=_RED)
+
+                try:
+                    # draw line from mid-shoulder to mid-hip
+                    lh_x, lh_y = visible["left_hip"]
+                    rh_x, rh_y = visible["right_hip"]
+                except KeyError:
+                    pass
+                else:
+                    mid_hip_x, mid_hip_y = (lh_x + rh_x) / 2, (lh_y + rh_y) / 2
+                    self.draw_line([mid_hip_x, mid_shoulder_x], [mid_hip_y, mid_shoulder_y], color=_RED)
         return self.output
 
 def visualize_data(cfg, scale=1.0, only_show_multi_instances=True, set='train'):

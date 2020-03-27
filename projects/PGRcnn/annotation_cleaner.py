@@ -42,11 +42,12 @@ import operator
 
 class AnnotationCleaner():
     def __init__(self):
-        self.VIA_PROJECT_FILE_PATH = 'datasets/jnw/merged_via_project.json'
-        self.DATASET_PATH          = 'datasets/jnw/total/'
-        self.OUTPUT_FILE_PATH      = 'datasets/jnw/reordered_via_project.json'
-        self.annotations = self.load_via_project_json()
-        self.CURRENT_FILE_KEY     = '' # for recording current processing name
+        self.VIA_PROJECT_FILE_PATH  = 'datasets/jnw/annotations/reordered_via_project.json'
+        self.DATASET_PATH           = 'datasets/jnw/total/'
+        self.OUTPUT_FILE_PATH       = 'datasets/jnw/reordered_via_project.json'
+        self.annotations            = self.load_via_project_json()
+        self.CURRENT_FILE_KEY       = '' # for recording current processing name
+        self.OUTPUT_ANNOTATION_PATH = 'datasets/jnw/annotations/jnw_annotations.json'
 
 
     def load_via_project_json(self):
@@ -246,34 +247,116 @@ class AnnotationCleaner():
         key = example[idx]
         return self.annotations['_via_img_metadata'][key]
 
+
+    def gather_single_file_annotation(self, data, image_id):
+        """
+        data is the annotation for single file.
+        Return the instance dict:
+        {
+          'image_id': int,
+          'filename': str,
+          'width': int,
+          'height': int,
+          'video_id': int,
+          'instances': list
+        }
+
+        in 'instances' field, each is a dict:
+            {'person_bbox'   : list size 1x4},
+            {'keypoints'     : list size 1x12 [x_ls, y_ls, v _ls, x_rs, ...]},
+            {'digit_bboxes'  : list (max size 2) of lists size 1x4},
+            {'digit_labels'     : list (max size 2)}
+
+        """
+
+        annotation = {
+          'image_id': None,
+          'filename': None,
+          'width': None,
+          'height': None,
+          'video_id': None,
+          'instances': []
+        }
+        # general info
+        annotation['image_id'] = image_id
+        annotation['filename'] = data['filename']
+        annotation['video_id'] = data['file_attributes']['video_id']
+
+        image_path = os.path.join(self.DATASET_PATH, data['filename'])
+        image = skimage.io.imread(image_path)
+        height, width = image.shape[:2]
+
+        annotation['height'] = height
+        annotation['width']  = width
+
+
+        instance = {'digit_bboxes': [], 'digit_labels': []}
+
+
+        for i, region in enumerate(data['regions']):
+            label = region['region_attributes']['label']
+            shape = region['shape_attributes']
+            if label == 'person':
+                if 'person_bbox' in instance:
+                    annotation['instances'].append(instance)
+                    instance = {'digit_bboxes': [], 'digit_labels': []}
+                bbox = [shape['x'], shape['y'], shape['width'], shape['height']]
+                bbox = xywh2xyxy(bbox)
+                instance['person_bbox'] = bbox
+
+            elif label == 'keypoints':
+                kpts = keypoints2list(shape['all_points_x'], shape['all_points_y'])
+                instance['keypoints'] = kpts
+            elif label == 'digit':
+                digit_label = int(region['region_attributes']['digit'])
+                # has segmentation annotation
+                if shape['name'] == 'rect':
+                    bbox = [shape['x'], shape['y'], shape['width'], shape['height']]
+                    bbox = xywh2xyxy(bbox)
+                else:
+                    bbox = polygon2xyxy(shape["all_points_x"], \
+                                             shape["all_points_y"], \
+                                             height, width)
+                instance['digit_bboxes'].append(bbox)
+                instance['digit_labels'].append(digit_label)
+            else:
+                raise NameError("label not found.")
+        annotation['instances'].append(instance)
+
+        # print(annotation)
+        return annotation
+
     def export(self):
         """
-        Convert the annotations directly to the format.
-        # The annotation format:
-        # [{'filename': filename, 'width': width, 'height': height, 'polygons': polygons, \
-        #   'keypoints': output_kpts, 'persons': persons, 'digits': output_digits,
-        #   'digits_bboxes': output_digit_boxes, 'numbers': numbers, 'video_id': anno['file_attributes']['video_id']
-        #   }]
+
+        the output annotations:
+        [{'image_id'   : int,
+          'filename'   : str,
+          'width'      : int,
+          'height'     : int,
+          'video_id'   : int,
+          'instances'  : list
+          }, {}]
+
+        in 'instances' field, each is a dict:
+            {'person_bbox'   : list size 1x4},
+            {'keypoints'     : list size 1x12 [x_ls, y_ls, v _ls, x_rs, ...]},
+            {'digit_bboxes'  : list (max size 2) of lists size 1x4},
+            {'digit_ids'     : list (max size 2)}
+
+        All bounding boxes follow the order of XYXY_ABS
+
         """
 
         output_annotations = []
+        image_id = 0
         for _, anno in self.annotations['_via_img_metadata'].items():
-            filename = anno['filename']
-            self.filename = filename
-            print(filename)
-            # only process annotation with regions label
-            if anno['regions']:
-                image_path = os.path.join(self.DATASET_PATH, anno['filename'])
-                image = skimage.io.imread(image_path)
-                height, width = image.shape[:2]
-                persons, polygons, numbers, output_kpts, output_digits, output_digit_boxes = self.process_regions(
-                    anno['regions'], height, width, filename=filename)
-                res = {'filename': filename, 'width': width, 'height': height, 'polygons': polygons, \
-                       'keypoints': output_kpts, 'persons': persons, 'digits': output_digits,
-                       'digits_bboxes': output_digit_boxes, 'numbers': numbers,
-                       'video_id': anno['file_attributes']['video_id']
-                       }
-                output_annotations.append(res)
+            print(anno['filename'])
+            res = self.gather_single_file_annotation(anno, image_id)
+            output_annotations.append(res)
+            image_id += 1
+        with open(self.OUTPUT_ANNOTATION_PATH, "w") as write_file:
+            json.dump(output_annotations, write_file)
 
     def test(self):
         example = self.get_one_example(key='new_3218_1.png15805')
@@ -305,13 +388,11 @@ class AnnotationCleaner():
 
 def polygon2xyxy(points_x, points_y, h, w):
     # should exclude the boundary points
-    points_x = np.array(points_x)
-    points_y = np.array(points_y)
-    x_max = np.minimum(np.amax(points_x) + 1, w)
-    x_min = np.maximum(np.amin(points_x) - 1, 0)
-    y_max = np.minimum(np.amax(points_y) + 1, h)
-    y_min = np.maximum(np.amin(points_y) - 1, 0)
-    return np.array([x_min, y_min, x_max, y_max])
+    x_max = min(max(points_x) + 1, w)
+    x_min = max(min(points_x) - 1, 0)
+    y_max = min(max(points_y) + 1, h)
+    y_min = max(min(points_y) - 1, 0)
+    return [x_min, y_min, x_max, y_max]
 
 def polygon2points(points_x, points_y, h, w):
     # should exclude the boundary points
@@ -322,6 +403,11 @@ def polygon2points(points_x, points_y, h, w):
     y2 = np.minimum(np.amax(points_y) + 1, h)
     y = np.maximum(np.amin(points_y) - 1, 0)
     return [(x, y), (x2, y), (x2, y2), (x, y2)]
+
+def keypoints2list(points_x, points_y):
+    # a list of all points in the order of ls, rs, rh, lh
+    # x, y, v
+    return [v for x, y in zip(points_x, points_y) for v in [x, y, 2]]
 
 def xywh2xyxy(xywh_list):
     x, y, width, height = xywh_list
@@ -378,8 +464,10 @@ def compute_iou_regions(regions):
 if __name__ == '__main__':
     annotation_cleaner = AnnotationCleaner()
     # annotation_cleaner.test()
-    annotation_cleaner.reorder_region_attributes()
-    annotation_cleaner.save()
+    # annotation_cleaner.reorder_region_attributes()
+    # annotation_cleaner.save()
+
+    annotation_cleaner.export()
 
 
 

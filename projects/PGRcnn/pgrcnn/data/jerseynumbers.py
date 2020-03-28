@@ -66,9 +66,8 @@ def get_dicts(data_dir, anno_dir, split=None):
             annotations[i]['instances'][j]['category_id'] = CLASS_NAMES.index('person')
             # broadcast the bbox mode to each instance
             annotations[i]['instances'][j]['bbox_mode'] = BoxMode.XYXY_ABS
-            if annotations[i]['instances'][j]['digit_labels']:
-                annotations[i]['instances'][j]['digit_ids'] = \
-                    [CLASS_NAMES.index(str(digit)) for digit in annotations[i]['instances'][j]['digit_labels']]
+            annotations[i]['instances'][j]['digit_ids'] = \
+                [CLASS_NAMES.index(str(digit)) for digit in annotations[i]['instances'][j]['digit_labels']]
 
     # for id, annotation in enumerate(annotations):
     #     # skip video ids not in the split list

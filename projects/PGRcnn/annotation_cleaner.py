@@ -290,7 +290,7 @@ class AnnotationCleaner():
         annotation['width']  = width
 
 
-        instance = {'digit_bboxes': [], 'digit_labels': []}
+        instance = {'digit_bboxes': [], 'digit_labels': [], 'keypoints': []}
 
 
         for i, region in enumerate(data['regions']):
@@ -321,7 +321,12 @@ class AnnotationCleaner():
                 instance['digit_labels'].append(digit_label)
             else:
                 raise NameError("label not found.")
-        annotation['instances'].append(instance)
+        if 'person_bbox' in instance:
+            annotation['instances'].append(instance)
+
+        for instance in annotation['instances']:
+            if len(instance['digit_bboxes']) > 2:
+                print("error on image {}".format(annotation['filename']))
 
         # print(annotation)
         return annotation

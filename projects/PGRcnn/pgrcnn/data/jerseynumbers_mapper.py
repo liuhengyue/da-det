@@ -26,7 +26,7 @@ class DatasetMapper:
 
     The callable currently does the following:
 
-    1. Read the image from "file_name"
+    1. Read the image from "filename"
     2. Applies cropping/geometric transforms to the image and annotations
     3. Prepare data and annotations to Tensor and :class:`Instances`
     """
@@ -120,6 +120,7 @@ class DatasetMapper:
         if "instances" in dataset_dict:
             # USER: Modify this if you want to keep them for some reason.
             for anno in dataset_dict["instances"]:
+                anno.pop("digit_labels", None)
                 if not self.mask_on:
                     anno.pop("segmentation", None)
                 if not self.keypoint_on:
@@ -151,5 +152,4 @@ class DatasetMapper:
             sem_seg_gt = transforms.apply_segmentation(sem_seg_gt)
             sem_seg_gt = torch.as_tensor(sem_seg_gt.astype("long"))
             dataset_dict["sem_seg"] = sem_seg_gt
-        # print(dataset_dict)
         return dataset_dict

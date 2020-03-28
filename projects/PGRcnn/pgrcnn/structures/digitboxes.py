@@ -10,7 +10,7 @@ class DigitBoxes(Boxes):
     def __init__(self, tensor: torch.Tensor):
         """
         Args:
-            tensor (Tensor[float]): a Nx2x4 matrix.  Each row is (x1, y1, x2, y2).
+            tensor (Tensor[float]): a Nxkx4 matrix.  Each row is (x1, y1, x2, y2).
         """
         device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device("cpu")
         tensor = torch.as_tensor(tensor, dtype=torch.float32, device=device)

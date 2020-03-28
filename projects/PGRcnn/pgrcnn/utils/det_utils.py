@@ -19,6 +19,9 @@ from pgrcnn.structures.digitboxes import DigitBoxes
 from detectron2.data import transforms as T
 from detectron2.data.catalog import MetadataCatalog
 
+# each person will only have at most 2 digits which we pad to
+MAX_DIGIT_PER_INSTANCE = 2
+
 class SizeMismatchError(ValueError):
     """
     When loaded image has difference width/height compared with annotation.
@@ -140,6 +143,8 @@ def transform_instance_annotations(
     If you need anything more specially designed for each data structure,
     you'll need to implement your own version of this function or the transforms.
 
+    Also, apply padding here
+
     Args:
         annotation (dict): dict of instance annotations for a single instance.
             It will be modified in-place.
@@ -147,11 +152,16 @@ def transform_instance_annotations(
         image_size (tuple): the height, width of the transformed image
         keypoint_hflip_indices (ndarray[int]): see `create_keypoint_hflip_indices`.
 
+        We pad everthing here, for digit ids, we pad with -1.
+
     Returns:
         dict:
             the same input dict with fields "bbox", "segmentation", "keypoints"
             transformed according to `transforms`.
             The "bbox_mode" field will be set to XYXY_ABS.
+
+
+
     """
     bbox = BoxMode.convert(annotation["person_bbox"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
     # Note that bbox is 1d (per-instance bounding box)
@@ -159,8 +169,14 @@ def transform_instance_annotations(
     annotation["bbox_mode"] = BoxMode.XYXY_ABS
     bbox = BoxMode.convert(annotation["digit_bboxes"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
     # Note that bbox is 1d (per-instance bounding box)
-    annotation["digit_bboxes"] = transforms.apply_box(bbox)
-
+    bbox = transforms.apply_box(bbox)
+    # pad to (2, 4)
+    annotation["digit_bboxes"] = np.pad(bbox, [(0, MAX_DIGIT_PER_INSTANCE - bbox.shape[0]), (0, 0)], 'constant', constant_values=(0))
+    # pad for digit_ids
+    annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])),\
+                                     'constant', constant_values=(0)).reshape((-1, 1))
+    # reshape the category_id
+    # annotation["category_id"] = np.array(annotation["category_id"])#.reshape((-1,))
     if "segmentation" in annotation:
         # each instance contains 1 or more polygons
         segm = annotation["segmentation"]
@@ -183,11 +199,14 @@ def transform_instance_annotations(
                 " COCO-style RLE as a dict.".format(type(segm))
             )
 
-    if "keypoints" in annotation:
+    if "keypoints" in annotation and len(annotation["keypoints"]) > 0:
         keypoints = transform_keypoint_annotations(
             annotation["keypoints"], transforms, image_size, keypoint_hflip_indices
         )
-        annotation["keypoints"] = keypoints
+    else:
+        keypoints = np.zeros((4, 3)) # pad with zeros, x=y=v=0
+    annotation["keypoints"] = keypoints
+
 
     return annotation
 
@@ -238,16 +257,31 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
 
     Returns:
         Instances:
-            It will contain fields "gt_boxes", "gt_classes",
+            It will contain fields "gt_boxes", "gt_classes", "gt_digits", "gt_digit_boxes",
             "gt_masks", "gt_keypoints", if they can be obtained from `annos`.
             This is the format that builtin models expect.
+
+            Instances:
+                'fields':
+                    gt_boxes       (N, 4)
+                    gt_classes     (N)
+                    gt_keypoints   (N, 4, 3)
+                    gt_digit_boxes (N, 2, 4)
+                    gt_digits      (N, 2, 1)
+                k in [0, 2]
+
+
     """
     target = Instances(image_size)
+    # person bboxes
     boxes = [BoxMode.convert(obj["person_bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
     boxes = target.gt_boxes = Boxes(boxes)
     boxes.clip(image_size)
     # digit bbox list of [[],[]]
-    boxes = [[BoxMode.convert(_obj, obj["bbox_mode"], BoxMode.XYXY_ABS) for _obj in obj["digit_bboxes"]] for obj in annos]
+    boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
+    # padding digit bboxes to (2, 4)
+    boxes = [np.pad(box, [(0, MAX_DIGIT_PER_INSTANCE - box.shape[0]), (0, 0)], 'constant', constant_values=(0)) for box in boxes]
+    # boxes = [[BoxMode.convert(_obj, obj["bbox_mode"], BoxMode.XYXY_ABS) for _obj in obj["digit_bboxes"]] for obj in annos]
     # for obj in annos:
     #     print(obj["digit_bbox"])
     # print(boxes)
@@ -256,8 +290,11 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
     classes = [obj["category_id"] for obj in annos]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes
-    # digit classes (list obj), it should have the same fist dim with person classes
-    classes = [obj["digit_ids"] for obj in annos]
+    # digit classes (list obj), it should have the same first dim with person classes
+    try:
+        classes = [obj["digit_ids"] for obj in annos]
+    except:
+        print(annos)
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_digit_classes = classes
 
@@ -290,10 +327,10 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
                     )
             masks = BitMasks(torch.stack([torch.from_numpy(x) for x in masks]))
         target.gt_masks = masks
-
-    if len(annos) and "keypoints" in annos[0]:
-        kpts = [obj.get("keypoints", []) for obj in annos]
-        target.gt_keypoints = Keypoints(kpts)
+    # todo: AttributeError: Cannot find field 'gt_keypoints' in the given Instances!
+    # not every instance has the keypoints annotation, so we pad it
+    kpts = [obj.get("keypoints", []) for obj in annos]
+    target.gt_keypoints = Keypoints(kpts)
 
     return target
 

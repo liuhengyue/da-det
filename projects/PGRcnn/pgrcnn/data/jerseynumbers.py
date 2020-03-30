@@ -14,7 +14,7 @@ from fvcore.common.file_io import PathManager, file_lock
 
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
-from detectron2.data.datasets.builtin_meta import KEYPOINT_CONNECTION_RULES
+
 
 # fmt: off
 CLASS_NAMES = [
@@ -33,6 +33,8 @@ KEYPOINT_CONNECTION_RULES = [
 
 # fmt: off
 
+DATASET_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../datasets/jnw'))
+assert os.path.exists(DATASET_ROOT), "Dataset jnw not found in {}".format(DATASET_ROOT)
 
 # The annotation format:
 # self.dataset:
@@ -69,41 +71,6 @@ def get_dicts(data_dir, anno_dir, split=None):
             annotations[i]['instances'][j]['digit_ids'] = \
                 [CLASS_NAMES.index(str(digit)) for digit in annotations[i]['instances'][j]['digit_labels']]
 
-    # for id, annotation in enumerate(annotations):
-    #     # skip video ids not in the split list
-    #     if split and annotation['video_id'] not in split:
-    #         continue
-    #     # we already have some of the fields
-    #     file_name = os.path.join(data_dir, annotation['filename'])
-    #     record = dict(file_name=file_name, image_id=id, height=annotation['height'], width=annotation['width'], video_id=annotation['video_id'])
-    #     anno_info = []
-    #     # parse annotations (per-instance)
-    #     for i, p_bbox in enumerate(annotation['persons']):
-    #         person_bbox = _parse_bbox(p_bbox)
-    #         # [[],[]]
-    #         digit_bbox  = [_parse_bbox(d_bbox) for d_bbox in annotation['digits_bboxes'][i]]
-    #         digit_bbox += (2 - len(digit_bbox)) * [[0, 0, 0, 0]] # note this could be filled with zeros
-    #         assert len(digit_bbox) == 2, "less than 2 digit box {} on {}".format(digit_bbox, annotation['filename'])
-    #         for j in digit_bbox:
-    #             assert len(j) == 4, "wrong digit box shape on {}".format(annotation['filename'])
-    #         bbox_mode   = BoxMode.XYXY_ABS
-    #         category_id = CLASS_NAMES.index('person')
-    #         digit_ids   = [ CLASS_NAMES.index(digit) for digit in annotation['digits'][i]] if annotation['digits'][i] else []
-    #         # normalize to 2-digit format paded with -1, if no annotation on the person, fill with [-1, -1]
-    #         digit_ids  += [-1] * (2 - len(digit_ids))
-    #         keypoints   = [val for ann in annotation['keypoints'][i] if ann for val in ann]
-    #         # check if the order of keypoints is correct
-    #
-    #         # if keypoints[0] > keypoints[3] or keypoints[6] < keypoints[9]:
-    #         #     print(id)
-    #         assert keypoints[0] <= keypoints[3], "Left_shoulder and right_shoulder order reversed {}, keypoints list {}".format(annotation['filename'], keypoints)
-    #         assert keypoints[6] >= keypoints[9], "Left_hip and right_hip order reversed {}, keypoints list {}".format(
-    #             annotation['filename'], keypoints)
-    #         anno_info.append(dict(person_bbox=person_bbox, bbox_mode=bbox_mode, category_id=category_id,
-    #                               digit_ids=digit_ids, digit_bbox=digit_bbox, keypoints=keypoints))
-    #
-    #     record['annotations'] = anno_info
-    #     dataset_dicts.append(record)
     return annotations
 
 
@@ -113,10 +80,8 @@ def get_dicts(data_dir, anno_dir, split=None):
 
 def register_jerseynumbers():
     train_video_ids, test_video_ids = [0, 1, 2, 3], [4]
-    # dataset_root = '../../datasets/jnw'
-    dataset_root = 'datasets/jnw'
-    dataset_dir =  os.path.join(dataset_root, 'total/')
-    annotation_dir = os.path.join(dataset_root, 'annotations/jnw_annotations.json')
+    dataset_dir =  os.path.join(DATASET_ROOT, 'total/')
+    annotation_dir = os.path.join(DATASET_ROOT, 'annotations/jnw_annotations.json')
     for name, d in zip(['train', 'val'], [train_video_ids, test_video_ids]):
         DatasetCatalog.register("jerseynumbers_" + name, lambda d=d: get_dicts(dataset_dir, annotation_dir, d))
         metadataCat = MetadataCatalog.get("jerseynumbers_" + name)
@@ -124,33 +89,4 @@ def register_jerseynumbers():
         metadataCat.set(keypoint_names=KEYPOINT_NAMES)
         metadataCat.set(keypoint_connection_rules=KEYPOINT_CONNECTION_RULES)
 
-
-# dataset test
-VIS_DATASET = True
-NUM_IMAGE_SHOW = 3
-
-if __name__ == "__main__":
-    from pgrcnn.vis.visualization import JerseyNumberVisualizer
-    dataset_root = 'datasets/jnw'
-    dataset_dir = os.path.join(dataset_root, 'total/')
-    annotation_dir = os.path.join(dataset_root, 'annotations/processed_annotations.json')
-    # register_jerseynumbers()
-    # dataset_dicts = get_dicts("jerseynumbers", annotation_dir, split=[0,1,2,3])
-    # register_jerseynumbers()
-    dataset_dicts = DatasetCatalog.get("jerseynumbers_train")
-    jnw_metadata = MetadataCatalog.get("jerseynumbers_train")
-    import random, cv2
-    if VIS_DATASET:
-        for d in random.sample(dataset_dicts, NUM_IMAGE_SHOW):
-            print(os.path.abspath(d['filename']))
-            img = cv2.imread(d["filename"])
-            visualizer = JerseyNumberVisualizer(img[:, :, ::-1], metadata=jnw_metadata, scale=2)
-            vis = visualizer.draw_dataset_dict(d)
-            winname = "example"
-            cv2.namedWindow(winname)  # Create a named window
-            cv2.moveWindow(winname, -1000, 500)  # Move it the main monitor if you have two monitors
-            cv2.imshow(winname, vis.get_image()[:, :, ::-1])
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-else:
-    register_jerseynumbers()
+register_jerseynumbers()

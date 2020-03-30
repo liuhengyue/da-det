@@ -1,14 +1,11 @@
 import platform
-from detectron2.engine import DefaultTrainer
 from detectron2.config import get_cfg
 from detectron2.data import build_detection_test_loader, build_detection_train_loader
-import os
 from pgrcnn.data.jerseynumbers_mapper import DatasetMapper
-from pgrcnn.vis import visualization as vis
 from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, launch
 from detectron2.utils.logger import setup_logger
 import detectron2.utils.comm as comm
-from detectron2.evaluation import COCOEvaluator, DatasetEvaluators, verify_results
+from detectron2.evaluation import verify_results
 from detectron2.checkpoint import DetectionCheckpointer
 from pgrcnn.evaluation.jerseynumber_evaluation import JerseyNumberEvaluator
 class Trainer(DefaultTrainer):
@@ -70,7 +67,7 @@ def main(args):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.config_file = "projects/PGRcnn/configs/pg_rcnn_r_50_FPN_1x.yaml"
+    args.config_file = "../configs/pg_rcnn_r_50_FPN_1x.yaml"
 
 
     # print("Command Line Args:", args)

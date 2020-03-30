@@ -7,13 +7,15 @@ from torch import nn
 from detectron2.structures import ImageList
 from detectron2.utils.events import get_event_storage
 from detectron2.utils.logger import log_first_n
-from detectron2.utils.visualizer import Visualizer
+# from detectron2.utils.visualizer import Visualizer
 
 from detectron2.modeling.backbone import build_backbone
 from detectron2.modeling.postprocessing import detector_postprocess
 from detectron2.modeling.proposal_generator import build_proposal_generator
 from detectron2.modeling.roi_heads import build_roi_heads
 from detectron2.modeling import META_ARCH_REGISTRY
+
+from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
 
 __all__ = ["PGRCNN"]
 
@@ -69,11 +71,11 @@ class PGRCNN(nn.Module):
             if self.input_format == "BGR":
                 img = img[::-1, :, :]
             img = img.transpose(1, 2, 0)
-            v_gt = Visualizer(img, None)
+            v_gt = JerseyNumberVisualizer(img, None)
             v_gt = v_gt.overlay_instances(boxes=input["instances"].gt_boxes)
             anno_img = v_gt.get_image()
             box_size = min(len(prop.proposal_boxes), max_vis_prop)
-            v_pred = Visualizer(img, None)
+            v_pred = JerseyNumberVisualizer(img, None)
             v_pred = v_pred.overlay_instances(
                 boxes=prop.proposal_boxes[0:box_size].tensor.cpu().numpy()
             )

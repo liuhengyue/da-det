@@ -7,7 +7,8 @@ from PIL import Image
 
 # from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
-from pgrcnn.utils import det_utils as utils
+from pgrcnn.data import det_utils as utils
+
 """
 This file contains the default mapping that's applied to "dataset dicts".
 With customization to the Jersey Numbers in the Wild Dataset.

@@ -38,6 +38,29 @@ class JerseyNumberVisualizer(Visualizer):
     def __init__(self, img_rgb, metadata, scale=1.0, instance_mode=ColorMode.IMAGE):
         super().__init__(img_rgb, metadata, scale=scale, instance_mode=instance_mode)
 
+
+    def instances_to_dict(self, data):
+        """
+        data: acutual data returned by dataloader
+        data['instances'] -> detectron2.structure.Instances
+
+        """
+        instances_list = []
+        for i in range(len(data['instances'])):
+            instance = data['instances'][i]
+            instances_list.append({
+            "person_bbox": instance.gt_boxes.tensor.numpy(),
+            "keypoints": instance.gt_keypoints.tensor.numpy(),
+            "digit_bboxes": instance.gt_digit_boxes.tensor.squeeze_().numpy(),
+            "digit_ids": instance.gt_digit_classes.squeeze_().numpy(),
+            "category_id": instance.gt_classes.squeeze_().numpy()
+            })
+        return {"instances": instances_list}
+
+    def draw_dataloader_instances(self, instances):
+        instances_list = self.instances_to_dict(instances)
+        return self.draw_dataset_dict(instances_list)
+
     def draw_single_instance(self, instance):
         """
         Given a instance dict, draw the corresponding
@@ -53,19 +76,28 @@ class JerseyNumberVisualizer(Visualizer):
             category_id = instance.get("category_id", None)
             bbox_mode = instance.get("bbox_mode", None)
 
-            keypts = np.array(keypoints).reshape(1, -1, 3) if keypoints else None
+            # filter empty boxes
+            digit_bboxes = digit_bboxes[np.where(~np.all(digit_bboxes == 0, axis=1))]
+            digit_ids = digit_ids[np.where(digit_ids > 0)]
+
+            if isinstance(keypoints, list):
+                keypts = np.array(keypoints).reshape(1, -1, 3) if keypoints else None
+            else:
+                keypts = keypoints
 
             # here, we have two different bbox (person and digit)
-            person_bbox = [BoxMode.convert(person_bbox, bbox_mode, BoxMode.XYXY_ABS)]
-            digit_bboxes = [BoxMode.convert(each_digit_bbox, bbox_mode, BoxMode.XYXY_ABS) for
+            if bbox_mode:
+                person_bbox = [BoxMode.convert(person_bbox, bbox_mode, BoxMode.XYXY_ABS)]
+                digit_bboxes = [BoxMode.convert(each_digit_bbox, bbox_mode, BoxMode.XYXY_ABS) for
                            each_digit_bbox in digit_bboxes]
             # person labels, digit labels
             labels = [category_id]
-            names = self.metadata.get("thing_classes", None)
-            # not too necessary
-            if names:
-                labels = [names[i] for i in labels]
-                digit_labels = [names[i] for i in digit_ids]
+            if self.metadata:
+                names = self.metadata.get("thing_classes", None)
+                # not too necessary
+                if names:
+                    labels = [names[i] for i in labels]
+                    digit_labels = [names[i] for i in digit_ids]
 
             self.overlay_instances(labels=labels, boxes=person_bbox, masks=None, keypoints=keypts)
             self.overlay_instances(labels=digit_labels, boxes=digit_bboxes, masks=None, keypoints=None)

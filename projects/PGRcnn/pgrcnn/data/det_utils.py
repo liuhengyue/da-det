@@ -14,7 +14,7 @@ from detectron2.structures import (
     RotatedBoxes,
     polygons_to_bitmask,
 )
-from pgrcnn.structures.instances import Instances
+from detectron2.structures.instances import Instances
 from pgrcnn.structures.digitboxes import DigitBoxes
 from detectron2.data import transforms as T
 from detectron2.data.catalog import MetadataCatalog
@@ -174,7 +174,7 @@ def transform_instance_annotations(
     annotation["digit_bboxes"] = np.pad(bbox, [(0, MAX_DIGIT_PER_INSTANCE - bbox.shape[0]), (0, 0)], 'constant', constant_values=(0))
     # pad for digit_ids
     annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])),\
-                                     'constant', constant_values=(0)).reshape((-1, 1))
+                                     'constant', constant_values=(-1)).reshape((-1, 1))
     # reshape the category_id
     # annotation["category_id"] = np.array(annotation["category_id"])#.reshape((-1,))
     if "segmentation" in annotation:

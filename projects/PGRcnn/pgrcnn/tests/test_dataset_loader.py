@@ -5,6 +5,7 @@ from detectron2.engine import DefaultTrainer, default_argument_parser, default_s
 from pgrcnn.data.jerseynumbers_mapper import DatasetMapper
 from detectron2.data import build_detection_train_loader
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
+from detectron2.data import DatasetCatalog, MetadataCatalog
 
 def setup(args):
     cfg = get_cfg()
@@ -30,20 +31,20 @@ def visualize_training(batched_inputs, cfg):
 
     """
 
-
+    jnw_metadata = MetadataCatalog.get("jerseynumbers_train")
     for input in batched_inputs:
         img = input["image"].cpu().numpy()
         assert img.shape[0] == 3, "Images should have 3 channels."
         if cfg.INPUT.FORMAT == "RGB":
             img = img[::-1, :, :]
         img = img.transpose(1, 2, 0)
-        v_gt = JerseyNumberVisualizer(img, None)
+        v_gt = JerseyNumberVisualizer(img, metadata=jnw_metadata)
         # v_gt = v_gt.overlay_instances(boxes=input["instances"].gt_boxes)
-        vis = v_gt.draw_dataset_dict(input)
-        # vis_img = v_gt.get_image()
+        v_gt = v_gt.draw_dataloader_instances(input)
+        vis_img = v_gt.get_image()
         # vis_img = vis_img.transpose(2, 0, 1)
         vis_name = " 1. GT bounding boxes"
-        cv2.imshow(vis_name, vis)
+        cv2.imshow(vis_name, vis_img)
         cv2.waitKey()
 
 if __name__ == "__main__":

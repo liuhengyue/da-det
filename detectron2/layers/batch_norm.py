@@ -127,7 +127,9 @@ class FrozenBatchNorm2d(nn.Module):
 def get_norm(norm, out_channels):
     """
     Args:
-        norm (str or callable):
+        norm (str or callable): either one of BN, SyncBN, FrozenBN, GN;
+            or a callable that takes a channel number and returns
+            the normalization layer as a nn.Module.
 
     Returns:
         nn.Module or None: the normalization layer
@@ -213,16 +215,16 @@ class NaiveSyncBatchNorm(BatchNorm2d):
         else:
             if B == 0:
                 vec = torch.zeros([2 * C + 1], device=mean.device, dtype=mean.dtype)
+                vec = vec + input.sum()  # make sure there is gradient w.r.t input
             else:
                 vec = torch.cat(
                     [mean, meansqr, torch.ones([1], device=mean.device, dtype=mean.dtype)], dim=0
                 )
             vec = AllReduce.apply(vec * B)
 
-            total_batch = vec[-1]
-            momentum = (
-                total_batch.detach().clamp(max=1) * self.momentum
-            )  # no update if total_batch is 0
+            total_batch = vec[-1].detach()
+            momentum = total_batch.clamp(max=1) * self.momentum  # no update if total_batch is 0
+            total_batch = torch.max(total_batch, torch.ones_like(total_batch))  # avoid div-by-zero
             mean, meansqr, _ = torch.split(vec / total_batch, C)
 
         var = meansqr - mean * mean

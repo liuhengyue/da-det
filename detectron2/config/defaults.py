@@ -470,6 +470,7 @@ _C.MODEL.RESNETS.STRIDE_IN_1X1 = True
 _C.MODEL.RESNETS.RES5_DILATION = 1
 
 # Output width of res2. Scaling this parameters will scale the width of all 1x1 convs in ResNet
+# For R18 and R34, this needs to be set to 64
 _C.MODEL.RESNETS.RES2_OUT_CHANNELS = 256
 _C.MODEL.RESNETS.STEM_OUT_CHANNELS = 64
 
@@ -549,7 +550,7 @@ _C.TEST.EXPECTED_RESULTS = []
 # The period (in terms of steps) to evaluate the model during training.
 # Set to 0 to disable.
 _C.TEST.EVAL_PERIOD = 0
-# The sigmas used to calculate keypoint OKS.
+# The sigmas used to calculate keypoint OKS. See http://cocodataset.org/#keypoints-eval
 # When empty it will use the defaults in COCO.
 # Otherwise it should have the same length as ROI_KEYPOINT_HEAD.NUM_KEYPOINTS.
 _C.TEST.KEYPOINT_OKS_SIGMAS = []

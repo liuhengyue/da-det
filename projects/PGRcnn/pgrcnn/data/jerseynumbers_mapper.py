@@ -47,6 +47,7 @@ class DatasetMapper:
         self.mask_format    = cfg.INPUT.MASK_FORMAT
         self.keypoint_on    = cfg.MODEL.KEYPOINT_ON
         self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
+        self.digit_only     = cfg.DATASETS.DIGIT_ONLY
         # fmt: on
         if self.keypoint_on and is_train:
             # Flip only makes sense in training
@@ -76,7 +77,7 @@ class DatasetMapper:
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
 
         # USER: Write your own image loading if it's not from a file
-        image = utils.read_image(dataset_dict["filename"], format=self.img_format)
+        image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
         utils.check_image_size(dataset_dict, image)
 
         if "instances" not in dataset_dict:
@@ -136,7 +137,7 @@ class DatasetMapper:
                 if obj.get("iscrowd", 0) == 0
             ]
             instances = utils.annotations_to_instances(
-                annos, image_shape, mask_format=self.mask_format
+                annos, image_shape, mask_format=self.mask_format, digit_only=self.digit_only
             )
             # Create a tight bounding box from masks, useful when image is cropped
             if self.crop_gen and instances.has("gt_masks"):

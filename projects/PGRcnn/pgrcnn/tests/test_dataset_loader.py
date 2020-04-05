@@ -3,20 +3,10 @@ import cv2
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, launch
 from pgrcnn.data.jerseynumbers_mapper import DatasetMapper
-from detectron2.data import build_detection_train_loader
+from pgrcnn.data.build import build_detection_train_loader
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
 from detectron2.data import DatasetCatalog, MetadataCatalog
-
-def setup(args):
-    cfg = get_cfg()
-    cfg.merge_from_file(args.config_file)
-    cfg.merge_from_list(args.opts)
-    # for mac os, change config to cpu
-    if platform.system() == 'Darwin':
-        cfg.MODEL.DEVICE = 'cpu'
-    cfg.freeze()
-    default_setup(cfg, args)
-    return cfg
+from pgrcnn.launch_utils import setup
 
 def visualize_training(batched_inputs, cfg):
     """
@@ -50,9 +40,13 @@ def visualize_training(batched_inputs, cfg):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.config_file = "../../../PGRcnn/configs/pg_rcnn_r_50_FPN_1x.yaml"
+    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
     cfg = setup(args)
     dataloader = build_detection_train_loader(cfg, mapper=DatasetMapper(cfg, True))
-    data = next(iter(dataloader))
-    print(data)
-    visualize_training(data, cfg)
+    # data = next(iter(dataloader))
+    # print(data)
+    # visualize_training(data, cfg)
+
+    for data in dataloader:
+        print(data)

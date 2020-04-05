@@ -206,7 +206,7 @@ if __name__ == "__main__":
 
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.config_file = "configs/pg_rcnn_r_50_FPN_1x.yaml"
+    args.config_file = "configs/pg_rcnn_r_50_FPN_3x.yaml"
 
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)

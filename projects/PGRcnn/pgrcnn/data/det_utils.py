@@ -151,6 +151,7 @@ def transform_instance_annotations(
         transforms (TransformList):
         image_size (tuple): the height, width of the transformed image
         keypoint_hflip_indices (ndarray[int]): see `create_keypoint_hflip_indices`.
+        digit_only (bool): if true, only gt digit is used.
 
         We pad everthing here, for digit ids, we pad with -1.
 
@@ -173,8 +174,7 @@ def transform_instance_annotations(
     # pad to (2, 4)
     annotation["digit_bboxes"] = np.pad(bbox, [(0, MAX_DIGIT_PER_INSTANCE - bbox.shape[0]), (0, 0)], 'constant', constant_values=(0))
     # pad for digit_ids
-    annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])),\
-                                     'constant', constant_values=(-1)).reshape((-1, 1))
+    annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])), 'constant', constant_values=(-1)).reshape((-1, 1))
     # reshape the category_id
     # annotation["category_id"] = np.array(annotation["category_id"])#.reshape((-1,))
     if "segmentation" in annotation:
@@ -245,7 +245,7 @@ def transform_keypoint_annotations(keypoints, transforms, image_size, keypoint_h
     return keypoints
 
 
-def annotations_to_instances(annos, image_size, mask_format="polygon"):
+def annotations_to_instances(annos, image_size, mask_format="polygon", digit_only=False):
     """
     Create an :class:`Instances` object used by the models,
     from instance annotations in the dataset dict.
@@ -273,6 +273,17 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
 
     """
     target = Instances(image_size)
+    if digit_only:
+        boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
+        # remove padded boxes
+        boxes = np.concatenate([box[np.any(box > 0, axis=1)] for box in boxes])
+        boxes = target.gt_boxes = Boxes(boxes)
+        boxes.clip(image_size)
+        classes = np.concatenate([obj["digit_ids"][np.where(obj["digit_ids"] > 0)] for obj in annos])
+        # ids are solved by cfg in datatset
+        classes = torch.tensor(classes, dtype=torch.int64).view(-1)
+        target.gt_classes = classes
+        return target
     # person bboxes
     boxes = [BoxMode.convert(obj["person_bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
     boxes = target.gt_boxes = Boxes(boxes)
@@ -291,10 +302,7 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes
     # digit classes (list obj), it should have the same first dim with person classes
-    try:
-        classes = [obj["digit_ids"] for obj in annos]
-    except:
-        print(annos)
+    classes = [obj["digit_ids"] for obj in annos]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_digit_classes = classes
 
@@ -327,7 +335,6 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
                     )
             masks = BitMasks(torch.stack([torch.from_numpy(x) for x in masks]))
         target.gt_masks = masks
-    # todo: AttributeError: Cannot find field 'gt_keypoints' in the given Instances!
     # not every instance has the keypoints annotation, so we pad it
     kpts = [obj.get("keypoints", []) for obj in annos]
     target.gt_keypoints = Keypoints(kpts)

@@ -59,7 +59,7 @@ def _distributed_worker(
     global_rank = machine_rank * num_gpus_per_machine + local_rank
     try:
         dist.init_process_group(
-            backend="NCCL", init_method=dist_url, world_size=world_size, rank=global_rank
+            backend="gloo", init_method=dist_url, world_size=world_size, rank=global_rank
         )
     except Exception as e:
         logger = logging.getLogger(__name__)

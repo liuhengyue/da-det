@@ -1,7 +1,10 @@
-_BASE_: "../../../configs/Base-RCNN-FPN.yaml"
+_BASE_: "../../../configs/COCO-Keypoints/keypoint_rcnn_R_50_FPN_3x.yaml"
 MODEL:
   META_ARCHITECTURE: "PGRCNN"
   KEYPOINT_ON: True
+  ROI_HEADS:
+    NAME: PGROIHeads
+    NUM_CLASSES: 1
   ROI_KEYPOINT_HEAD:
     NUM_KEYPOINTS: 4
   DEVICE: cuda # cpu or cuda
@@ -22,5 +25,6 @@ DATALOADER:
   NUM_WORKERS: 4
 TEST:
   KEYPOINT_OKS_SIGMAS: [0.079, 0.079, 0.107, 0.107]
-VIS_PERIOD: 1
+OUTPUT_DIR: ./output
+VIS_PERIOD: 1000
 VERSION: 2

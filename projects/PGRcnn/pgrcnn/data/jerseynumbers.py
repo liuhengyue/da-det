@@ -15,12 +15,12 @@ from fvcore.common.file_io import PathManager, file_lock
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
-
 # fmt: off
 CLASS_NAMES = [
-    'person', '0', '1', '2', '3', '4', '5',
-    '6', '7', '8', '9'
+    'person', '0', '1', '2', '3',
+    '4', '5', '6', '7', '8', '9'
 ]
+
 KEYPOINT_NAMES = ["left_shoulder", "right_shoulder", "right_hip", "left_hip"] # follow the name in COCO
 
 KEYPOINT_CONNECTION_RULES = [
@@ -31,7 +31,7 @@ KEYPOINT_CONNECTION_RULES = [
 ]
 
 
-# fmt: off
+# fmt: on
 
 DATASET_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../datasets/jnw'))
 assert os.path.exists(DATASET_ROOT), "Dataset jnw not found in {}".format(DATASET_ROOT)
@@ -50,7 +50,7 @@ def _parse_bbox(old_bbox):
     return [old_bbox[1], old_bbox[0], old_bbox[3], old_bbox[2]]
 
 
-def get_dicts(data_dir, anno_dir, split=None):
+def get_dicts(data_dir, anno_dir, split=None, digit_only=False):
     """
     data_dir: datasets/jnw/total
     anno_dir: datasets/jnw/annotations/jnw_annotations.json
@@ -63,13 +63,17 @@ def get_dicts(data_dir, anno_dir, split=None):
     # add actual dataset path prefix, and extra fields
     for i in range(len(annotations)): # file level
         # construct full path for each image
-        annotations[i]['filename'] = os.path.join(data_dir, annotations[i]['filename'])
-        for j in range(len(annotations[i]['instances'])): # instance level
-            annotations[i]['instances'][j]['category_id'] = CLASS_NAMES.index('person')
+        annotations[i]['file_name'] = os.path.join(data_dir, annotations[i]['filename'])
+        del annotations[i]['filename']
+        # rename 'instances' to 'annotations'
+        annotations[i]['annotations'] = annotations[i].pop('instances')
+        for j in range(len(annotations[i]['annotations'])): # instance level
+            if not digit_only:
+                annotations[i]['annotations'][j]['category_id'] = CLASS_NAMES.index('person')
             # broadcast the bbox mode to each instance
-            annotations[i]['instances'][j]['bbox_mode'] = BoxMode.XYXY_ABS
-            annotations[i]['instances'][j]['digit_ids'] = \
-                [CLASS_NAMES.index(str(digit)) for digit in annotations[i]['instances'][j]['digit_labels']]
+            annotations[i]['annotations'][j]['bbox_mode'] = BoxMode.XYXY_ABS
+            annotations[i]['annotations'][j]['digit_ids'] = \
+                [CLASS_NAMES.index(str(digit)) for digit in annotations[i]['annotations'][j]['digit_labels']]
 
     return annotations
 
@@ -78,15 +82,20 @@ def get_dicts(data_dir, anno_dir, split=None):
 
 
 
-def register_jerseynumbers():
-    train_video_ids, test_video_ids = [0, 1, 2, 3], [4]
+def register_jerseynumbers(cfg):
+    """
+    The jersey number dataset needs config file s.t. it has multiple settings.
+    """
+    if cfg.DATASETS.DIGIT_ONLY:
+        CLASS_NAMES.pop(0)
+    train_video_ids, test_video_ids = cfg.DATASETS.TRAIN_VIDEO_IDS, cfg.DATASETS.TEST_VIDEO_IDS
     dataset_dir =  os.path.join(DATASET_ROOT, 'total/')
     annotation_dir = os.path.join(DATASET_ROOT, 'annotations/jnw_annotations.json')
     for name, d in zip(['train', 'val'], [train_video_ids, test_video_ids]):
-        DatasetCatalog.register("jerseynumbers_" + name, lambda d=d: get_dicts(dataset_dir, annotation_dir, d))
+        DatasetCatalog.register("jerseynumbers_" + name, lambda d=d: get_dicts(dataset_dir, annotation_dir, d, digit_only=cfg.DATASETS.DIGIT_ONLY))
         metadataCat = MetadataCatalog.get("jerseynumbers_" + name)
         metadataCat.set(thing_classes=CLASS_NAMES)
         metadataCat.set(keypoint_names=KEYPOINT_NAMES)
         metadataCat.set(keypoint_connection_rules=KEYPOINT_CONNECTION_RULES)
 
-register_jerseynumbers()
+# register_jerseynumbers()

@@ -50,12 +50,12 @@ class JerseyNumberVisualizer(Visualizer):
             instance = data['instances'][i]
             instances_list.append({
             "person_bbox": instance.gt_boxes.tensor.numpy(),
-            "keypoints": instance.gt_keypoints.tensor.numpy(),
-            "digit_bboxes": instance.gt_digit_boxes.tensor.squeeze_().numpy(),
-            "digit_ids": instance.gt_digit_classes.squeeze_().numpy(),
+            "keypoints": instance.gt_keypoints.tensor.numpy() if hasattr(instance, 'gt_keypoints') else None,
+            "digit_bboxes": instance.gt_digit_boxes.tensor.squeeze_().numpy() if hasattr(instance, 'gt_digit_boxes') else None,
+            "digit_ids": instance.gt_digit_classes.squeeze_().numpy() if hasattr(instance, 'gt_digit_classes') else None,
             "category_id": instance.gt_classes.squeeze_().numpy()
             })
-        return {"instances": instances_list}
+        return {"annotations": instances_list}
 
     def draw_dataloader_instances(self, instances):
         instances_list = self.instances_to_dict(instances)
@@ -69,38 +69,40 @@ class JerseyNumberVisualizer(Visualizer):
         instance has four fields: digit_bboxes, digit_labels, person_bbox, keypoints
         """
         if instance is not None:
-            person_bbox = instance.get("person_bbox", None)
-            keypoints   = instance.get("keypoints", None)
-            digit_bboxes = instance.get("digit_bboxes", None)
-            digit_ids = instance.get("digit_ids", [])
+            person_bbox = np.array(instance.get("person_bbox", np.empty((0, 4))))
+            keypoints   = np.array(instance.get("keypoints", np.empty((0, 4, 3))))
+            digit_bboxes = np.array(instance.get("digit_bboxes", np.empty((0, 4)))).reshape((-1, 4))
+            digit_ids = np.array(instance.get("digit_ids", np.empty((0,))))
             category_id = instance.get("category_id", None)
             bbox_mode = instance.get("bbox_mode", None)
 
-            # filter empty boxes
-            digit_bboxes = digit_bboxes[np.where(~np.all(digit_bboxes == 0, axis=1))]
-            digit_ids = digit_ids[np.where(digit_ids > 0)]
 
-            if isinstance(keypoints, list):
-                keypts = np.array(keypoints).reshape(1, -1, 3) if keypoints else None
-            else:
-                keypts = keypoints
+            # filter empty boxes
+            if isinstance(digit_bboxes, list) and len(digit_bboxes) == 0:
+                digit_bboxes = np.empty((0, 4))
+            digit_bboxes = digit_bboxes[np.where(~np.all(digit_bboxes == 0, axis=1))]
+            digit_ids = digit_ids[np.where(digit_ids > -1)]
+
+            keypts = keypoints.reshape(1, -1, 3) if keypoints is not None else None
+
 
             # here, we have two different bbox (person and digit)
-            if bbox_mode:
+            if bbox_mode is not None:
                 person_bbox = [BoxMode.convert(person_bbox, bbox_mode, BoxMode.XYXY_ABS)]
                 digit_bboxes = [BoxMode.convert(each_digit_bbox, bbox_mode, BoxMode.XYXY_ABS) for
                            each_digit_bbox in digit_bboxes]
             # person labels, digit labels
-            labels = [category_id]
+            labels = [category_id] if category_id is not None else None
             if self.metadata:
                 names = self.metadata.get("thing_classes", None)
                 # not too necessary
                 if names:
-                    labels = [names[i] for i in labels]
-                    digit_labels = [names[i] for i in digit_ids]
-
-            self.overlay_instances(labels=labels, boxes=person_bbox, masks=None, keypoints=keypts)
-            self.overlay_instances(labels=digit_labels, boxes=digit_bboxes, masks=None, keypoints=None)
+                    labels = [names[i] for i in labels] if labels is not None else None
+                    digit_labels = [names[i] for i in digit_ids] if digit_ids is not None else None
+            if labels is not None:
+                self.overlay_instances(labels=labels, boxes=person_bbox, masks=None, keypoints=keypts)
+            if digit_labels is not None:
+                self.overlay_instances(labels=digit_labels, boxes=digit_bboxes, masks=None, keypoints=None)
             return self.output
 
 
@@ -117,7 +119,7 @@ class JerseyNumberVisualizer(Visualizer):
         Returns:
             output (VisImage): image object with visualizations.
         """
-        annos = dic.get("instances", None)
+        annos = dic.get("annotations", None)
         if annos:
             for anno in annos:
                 self.draw_single_instance(anno)
@@ -185,7 +187,7 @@ class JerseyNumberVisualizer(Visualizer):
         if labels is not None:
             assert len(labels) == num_instances
         if assigned_colors is None:
-            assigned_colors = [random_color(rgb=True, maximum=1) for _ in range(num_instances)]
+            # assigned_colors = [random_color(rgb=True, maximum=1) for _ in range(num_instances)]
             assigned_colors = [colormap(rgb=True, maximum=1)[i] for i in range(num_instances)]
 
         if num_instances == 0:

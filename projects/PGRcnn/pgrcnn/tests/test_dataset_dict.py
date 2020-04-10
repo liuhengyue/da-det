@@ -1,11 +1,20 @@
 import os
 from detectron2.data import DatasetCatalog, MetadataCatalog
+from detectron2.engine import default_argument_parser
+from launch_utils import setup
 
 # dataset test
 VIS_DATASET = True
 NUM_IMAGE_SHOW = 3
 
 if __name__ == "__main__":
+    # register dataset
+    args = default_argument_parser().parse_args()
+    print(args)
+    # lazy add config file
+    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
+    cfg = setup(args)
     from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
     dataset_root = os.path.join('../../../../', 'datasets/jnw') # working dir is the current file
     dataset_dir = os.path.join(dataset_root, 'total/')
@@ -18,8 +27,9 @@ if __name__ == "__main__":
     import random, cv2
     if VIS_DATASET:
         for d in random.sample(dataset_dicts, NUM_IMAGE_SHOW):
-            print(os.path.abspath(d['filename']))
-            img = cv2.imread(d["filename"])
+            print("file name: ", os.path.abspath(d['file_name']))
+            print(d)
+            img = cv2.imread(d["file_name"])
             visualizer = JerseyNumberVisualizer(img[:, :, ::-1], metadata=jnw_metadata, scale=2)
             vis = visualizer.draw_dataset_dict(d)
             winname = "example"

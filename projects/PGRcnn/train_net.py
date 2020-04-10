@@ -2,7 +2,7 @@ from detectron2.engine import default_argument_parser, launch
 import detectron2.utils.comm as comm
 from detectron2.evaluation import verify_results
 from detectron2.checkpoint import DetectionCheckpointer
-from pgrcnn.launch_utils import setup, Trainer
+from launch_utils import setup, Trainer
 
 def main(args):
     cfg = setup(args)
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     # lazy add config file
     args.num_gpus = 1
     args.config_file = "../configs/faster_rcnn_R_50_FPN_3x.yaml"
-    args.eval_only = False
+    args.eval_only = True
     args.resume = True
     # args.config_file = "../configs/pg_rcnn_r_50_FPN_3x.yaml"
 

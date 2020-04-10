@@ -63,8 +63,7 @@ def get_dicts(data_dir, anno_dir, split=None, digit_only=False):
     # add actual dataset path prefix, and extra fields
     for i in range(len(annotations)): # file level
         # construct full path for each image
-        annotations[i]['file_name'] = os.path.join(data_dir, annotations[i]['filename'])
-        del annotations[i]['filename']
+        annotations[i]['file_name'] = os.path.join(data_dir, annotations[i]['file_name'])
         # rename 'instances' to 'annotations'
         annotations[i]['annotations'] = annotations[i].pop('instances')
         for j in range(len(annotations[i]['annotations'])): # instance level

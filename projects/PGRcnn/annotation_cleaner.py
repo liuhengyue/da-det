@@ -14,6 +14,7 @@ from shapely import geometry, ops
 from functools import reduce
 import operator
 
+
 # ================== Macro JSON structure ==================
 #     '_via_settings': dict
 #     '_via_img_metadata'': dict
@@ -42,12 +43,12 @@ import operator
 
 class AnnotationCleaner():
     def __init__(self):
-        self.VIA_PROJECT_FILE_PATH  = 'datasets/jnw/annotations/reordered_via_project.json'
-        self.DATASET_PATH           = 'datasets/jnw/total/'
-        self.OUTPUT_FILE_PATH       = 'datasets/jnw/reordered_via_project.json'
+        self.VIA_PROJECT_FILE_PATH  = '../../datasets/jnw/annotations/reordered_via_project.json'
+        self.DATASET_PATH           = '../../datasets/jnw/total/'
+        self.OUTPUT_FILE_PATH       = '../../datasets/jnw/reordered_via_project.json'
         self.annotations            = self.load_via_project_json()
         self.CURRENT_FILE_KEY       = '' # for recording current processing name
-        self.OUTPUT_ANNOTATION_PATH = 'datasets/jnw/annotations/jnw_annotations.json'
+        self.OUTPUT_ANNOTATION_PATH = '../../datasets/jnw/annotations/jnw_annotations.json'
 
 
     def load_via_project_json(self):
@@ -271,16 +272,16 @@ class AnnotationCleaner():
 
         annotation = {
           'image_id': None,
-          'filename': None,
+          'file_name': None,
           'width': None,
           'height': None,
           'video_id': None,
           'instances': []
         }
         # general info
-        annotation['image_id'] = image_id
-        annotation['filename'] = data['filename']
-        annotation['video_id'] = data['file_attributes']['video_id']
+        annotation['image_id'] = int(image_id)
+        annotation['file_name'] = data['filename']
+        annotation['video_id'] = int(data['file_attributes']['video_id'])
 
         image_path = os.path.join(self.DATASET_PATH, data['filename'])
         image = skimage.io.imread(image_path)

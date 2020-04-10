@@ -279,9 +279,10 @@ def annotations_to_instances(annos, image_size, mask_format="polygon", digit_onl
         boxes = np.concatenate([box[np.any(box > 0, axis=1)] for box in boxes])
         boxes = target.gt_boxes = Boxes(boxes)
         boxes.clip(image_size)
-        classes = np.concatenate([obj["digit_ids"][np.where(obj["digit_ids"] > 0)] for obj in annos])
+        classes = np.concatenate([obj["digit_ids"][np.where(obj["digit_ids"] > -1)] for obj in annos])
         # ids are solved by cfg in datatset
         classes = torch.tensor(classes, dtype=torch.int64).view(-1)
+        # todo: AssertionError: Adding a field of length 1 to a Instances of length 2
         target.gt_classes = classes
         return target
     # person bboxes

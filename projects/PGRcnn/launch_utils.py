@@ -17,6 +17,7 @@ def setup(args):
     # for mac os, change config to cpu
     if platform.system() == 'Darwin':
         cfg.MODEL.DEVICE = 'cpu'
+        cfg.SOLVER.IMS_PER_BATCH = 1
     cfg.freeze()
     register_jerseynumbers(cfg)
     default_setup(cfg, args)

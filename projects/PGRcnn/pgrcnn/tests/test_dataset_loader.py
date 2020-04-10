@@ -1,12 +1,10 @@
-import platform
 import cv2
-from detectron2.config import get_cfg
-from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, launch
+from detectron2.engine import default_argument_parser
 from pgrcnn.data.jerseynumbers_mapper import DatasetMapper
 from pgrcnn.data.build import build_detection_train_loader
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
-from detectron2.data import DatasetCatalog, MetadataCatalog
-from pgrcnn.launch_utils import setup
+from detectron2.data import MetadataCatalog
+from launch_utils import setup
 
 def visualize_training(batched_inputs, cfg):
     """
@@ -40,13 +38,13 @@ def visualize_training(batched_inputs, cfg):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
-    args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
+    args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    # args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
     cfg = setup(args)
     dataloader = build_detection_train_loader(cfg, mapper=DatasetMapper(cfg, True))
-    # data = next(iter(dataloader))
-    # print(data)
-    # visualize_training(data, cfg)
+    data = next(iter(dataloader))
+    print(data)
+    visualize_training(data, cfg)
 
-    for data in dataloader:
-        print(data)
+    # for data in dataloader:
+    #     print(data)

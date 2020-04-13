@@ -68,7 +68,7 @@ class JerseyNumberEvaluator(COCOEvaluator):
             cache_path = os.path.join(output_dir, f"{dataset_name}_coco_format.json")
             self._metadata.json_file = cache_path
             # this function is modified
-            convert_to_coco_json(dataset_name, cache_path)
+            convert_to_coco_json(dataset_name, cache_path, allow_cached=False) # delete previous converted coco json
 
         json_file = PathManager.get_local_path(self._metadata.json_file)
         with contextlib.redirect_stdout(io.StringIO()):
@@ -178,10 +178,11 @@ def convert_to_coco_dict(dataset_name):
         anns_per_image = image_dict["annotations"]
         for annotation in anns_per_image:
             bbox_mode = annotation["bbox_mode"]
-            # create a new dict with only COCO fields
-            coco_annotation = {}
-            for bbox_idx, bbox in enumerate(annotation["digit_bboxes"]):
 
+            for bbox_idx, bbox in enumerate(annotation["digit_bboxes"]):
+                # create a new dict with only COCO fields
+                # for each annotation
+                coco_annotation = {}
                 # bbox = np.array(annotation["digit_bboxes"])
                 # COCO requirement: XYWH box format
                 bbox = BoxMode.convert(bbox, bbox_mode, BoxMode.XYWH_ABS)

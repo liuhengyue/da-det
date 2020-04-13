@@ -7,6 +7,7 @@ from PIL import Image
 
 # from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
+from detectron2.data.dataset_mapper import DatasetMapper
 from pgrcnn.data import det_utils as utils
 
 """
@@ -17,7 +18,7 @@ With customization to the Jersey Numbers in the Wild Dataset.
 __all__ = ["DatasetMapper"]
 
 
-class DatasetMapper:
+class CustomDatasetMapper(DatasetMapper):
     """
     A callable which takes a dataset dict in Detectron2 Dataset format,
     and map it into a format used by the model.

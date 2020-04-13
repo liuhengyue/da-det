@@ -18,11 +18,10 @@ from detectron2.utils.logger import log_first_n
 from detectron2.data import samplers
 from detectron2.data.catalog import DatasetCatalog, MetadataCatalog
 from detectron2.data.common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
-from detectron2.data.dataset_mapper import DatasetMapper
 from detectron2.data.detection_utils import check_metadata_consistency
 from detectron2.data.build import get_detection_dataset_dicts, worker_init_reset_seed, trivial_batch_collator,\
 load_proposals_into_dataset, filter_images_with_only_crowd_annotations, filter_images_with_few_keypoints
-
+from pgrcnn.data.custom_mapper import CustomDatasetMapper
 def build_sequential_dataloader(cfg, mapper=None, set="train"):
     """
     A data loader is created by the following steps:
@@ -68,7 +67,7 @@ def build_sequential_dataloader(cfg, mapper=None, set="train"):
     dataset = DatasetFromList(dataset_dicts, copy=False)
 
     if mapper is None:
-        mapper = DatasetMapper(cfg, True)
+        mapper = CustomDatasetMapper(cfg, True)
     dataset = MapDataset(dataset, mapper)
 
     sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
@@ -143,7 +142,7 @@ def build_detection_train_loader(cfg, mapper=None):
     dataset = DatasetFromList(dataset_dicts, copy=False)
 
     if mapper is None:
-        mapper = DatasetMapper(cfg, True)
+        mapper = CustomDatasetMapper(cfg, True)
     dataset = MapDataset(dataset, mapper)
 
     sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
@@ -213,7 +212,7 @@ def build_detection_test_loader(cfg, dataset_name, mapper=None):
 
     dataset = DatasetFromList(dataset_dicts)
     if mapper is None:
-        mapper = DatasetMapper(cfg, False)
+        mapper = CustomDatasetMapper(cfg, False)
     dataset = MapDataset(dataset, mapper)
 
     sampler = samplers.InferenceSampler(len(dataset))

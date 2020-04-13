@@ -14,11 +14,11 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import Boxes, BoxMode, Instances
 from detectron2.utils.logger import setup_logger
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
-
+from launch_utils import setup
 
 def get_default_args():
-    return ['--input', './pgrcnn/output/inference/coco_instances_results.json',\
-            '--output', './pgrcnn/output/inference/vis',
+    return ['--input', './output/inference/coco_instances_results.json',\
+            '--output', './output/inference/vis',
             '--dataset', 'jerseynumbers_val']
 
 
@@ -29,7 +29,7 @@ def create_instances(predictions, image_size):
     chosen = (score > args.conf_threshold).nonzero()[0]
     score = score[chosen]
     bbox = np.asarray([predictions[i]["bbox"] for i in chosen])
-    bbox = BoxMode.convert(bbox, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
+    bbox = BoxMode.convert(bbox, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS) if bbox.size > 0 else bbox
 
     labels = np.asarray([dataset_id_map(predictions[i]["category_id"]) for i in chosen])
 
@@ -53,9 +53,11 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", help="name of the dataset", default="coco_2017_val")
     parser.add_argument("--conf-threshold", default=0.5, type=float, help="confidence threshold")
     args = parser.parse_args(get_default_args())
+    # lazy add config file
+    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    args.config_file = "./configs/faster_rcnn_R_50_FPN_1x.yaml"
+    cfg = setup(args)
 
-
-    logger = setup_logger()
 
     with PathManager.open(args.input, "r") as f:
         predictions = json.load(f)

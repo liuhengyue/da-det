@@ -1,7 +1,7 @@
 _BASE_: "../../../configs/Base-RCNN-FPN.yaml"
 MODEL:
 #  WEIGHTS: "detectron2://COCO-Detection/faster_rcnn_R_50_FPN_3x/137849458/model_final_280758.pkl"
-  WEIGHTS: ../output/model_0009999.pth
+  WEIGHTS: ./output/model_0089999.pth
   MASK_ON: False
   RESNETS:
     DEPTH: 50
@@ -18,7 +18,12 @@ DATASETS:
 DATALOADER:
   NUM_WORKERS: 8
 SOLVER:
-  IMS_PER_BATCH: 8
-  STEPS: (210000, 250000)
-  MAX_ITER: 270000
-OUTPUT_DIR: ../output
+  IMS_PER_BATCH: 16
+OUTPUT_DIR: ./output
+INPUT:
+  MIN_SIZE_TEST: 600
+TEST:
+  AUG:
+    ENABLED: True
+    FLIP: False
+    MIN_SIZES: (2600, 2800)

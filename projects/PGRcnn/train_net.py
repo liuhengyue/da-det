@@ -13,6 +13,8 @@ def main(args):
             cfg.MODEL.WEIGHTS, resume=args.resume
         )
         res = Trainer.test(cfg, model)
+        if cfg.TEST.AUG.ENABLED:
+            res.update(Trainer.test_with_TTA(cfg, model))
         if comm.is_main_process():
             verify_results(cfg, res)
         return res
@@ -36,7 +38,7 @@ if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
     args.num_gpus = 1
-    args.config_file = "../configs/faster_rcnn_R_50_FPN_3x.yaml"
+    args.config_file = "configs/faster_rcnn_R_50_FPN_1x.yaml"
     args.eval_only = True
     args.resume = True
     # args.config_file = "../configs/pg_rcnn_r_50_FPN_3x.yaml"

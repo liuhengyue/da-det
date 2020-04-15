@@ -300,7 +300,7 @@ class AnnotationCleaner():
             if label == 'person':
                 if 'person_bbox' in instance:
                     annotation['instances'].append(instance)
-                    instance = {'digit_bboxes': [], 'digit_labels': []}
+                    instance = {'digit_bboxes': [], 'digit_labels': [], 'keypoints': []}
                 bbox = [shape['x'], shape['y'], shape['width'], shape['height']]
                 bbox = xywh2xyxy(bbox)
                 instance['person_bbox'] = bbox

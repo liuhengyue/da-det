@@ -95,13 +95,13 @@ class RPN(nn.Module):
         super().__init__()
 
         # fmt: off
-        self.min_box_side_len        = cfg.MODEL.PROPOSAL_GENERATOR.MIN_SIZE
-        self.in_features             = cfg.MODEL.RPN.IN_FEATURES
-        self.nms_thresh              = cfg.MODEL.RPN.NMS_THRESH
-        self.batch_size_per_image    = cfg.MODEL.RPN.BATCH_SIZE_PER_IMAGE
-        self.positive_fraction       = cfg.MODEL.RPN.POSITIVE_FRACTION
-        self.smooth_l1_beta          = cfg.MODEL.RPN.SMOOTH_L1_BETA
-        self.loss_weight             = cfg.MODEL.RPN.LOSS_WEIGHT
+        self.min_box_side_len     = cfg.MODEL.PROPOSAL_GENERATOR.MIN_SIZE
+        self.in_features          = cfg.MODEL.RPN.IN_FEATURES
+        self.nms_thresh           = cfg.MODEL.RPN.NMS_THRESH
+        self.batch_size_per_image = cfg.MODEL.RPN.BATCH_SIZE_PER_IMAGE
+        self.positive_fraction    = cfg.MODEL.RPN.POSITIVE_FRACTION
+        self.smooth_l1_beta       = cfg.MODEL.RPN.SMOOTH_L1_BETA
+        self.loss_weight          = cfg.MODEL.RPN.LOSS_WEIGHT
         # fmt: on
 
         # Map from self.training state to train/test settings
@@ -144,8 +144,6 @@ class RPN(nn.Module):
         features = [features[f] for f in self.in_features]
         pred_objectness_logits, pred_anchor_deltas = self.rpn_head(features)
         anchors = self.anchor_generator(features)
-        # TODO: The anchors only depend on the feature map shape; there's probably
-        # an opportunity for some optimizations (e.g., caching anchors).
         outputs = RPNOutputs(
             self.box2box_transform,
             self.anchor_matcher,

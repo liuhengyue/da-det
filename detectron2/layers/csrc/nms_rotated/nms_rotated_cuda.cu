@@ -72,6 +72,7 @@ __global__ void nms_rotated_cuda_kernel(
 namespace detectron2 {
 
 at::Tensor nms_rotated_cuda(
+    // input must be contiguous
     const at::Tensor& dets,
     const at::Tensor& scores,
     float iou_threshold) {
@@ -94,7 +95,7 @@ at::Tensor nms_rotated_cuda(
   dim3 threads(threadsPerBlock);
   cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(
+  AT_DISPATCH_FLOATING_TYPES(
       dets_sorted.type(), "nms_rotated_kernel_cuda", [&] {
         nms_rotated_cuda_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
             dets_num,

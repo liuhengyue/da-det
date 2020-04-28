@@ -13,11 +13,11 @@ class CfgNode(_CfgNode):
     The same as `fvcore.common.config.CfgNode`, but different in:
 
     1. Use unsafe yaml loading by default.
-      Note that this may lead to arbitrary code execution: you must not
-      load a config file from untrusted sources before manually inspecting
-      the content of the file.
+       Note that this may lead to arbitrary code execution: you must not
+       load a config file from untrusted sources before manually inspecting
+       the content of the file.
     2. Support config versioning.
-      When attempting to merge an old config, it will convert the old config automatically.
+       When attempting to merge an old config, it will convert the old config automatically.
     """
 
     # Note that the default value of allow_unsafe is changed to True
@@ -133,6 +133,10 @@ def configurable(init_func):
         a3 = A(cfg, b=3, c=4)  # construct with extra overwrite
     """
     assert init_func.__name__ == "__init__", "@configurable should only be used for __init__!"
+    if init_func.__module__.startswith("detectron2."):
+        assert (
+            "experimental" in init_func.__doc__
+        ), f"configurable {init_func} should be marked experimental"
 
     @functools.wraps(init_func)
     def wrapped(self, *args, **kwargs):

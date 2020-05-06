@@ -5,6 +5,8 @@ def get_cfg() -> CfgNode:
     Get a copy of the default config.
     Then add extra fields.
 
+    We
+
     Returns:
         a detectron2 CfgNode instance.
     """
@@ -18,7 +20,10 @@ def add_poseguide_config(cfg):
     """
 
     # 10 digit recognition
-    cfg.MODEL.ROI_HEADS.NUM_DIGITS = 10
+
     cfg.DATASETS.DIGIT_ONLY = True
     cfg.DATASETS.TRAIN_VIDEO_IDS = [0,1,3]
     cfg.DATASETS.TEST_VIDEO_IDS =[2]
+
+    _C.MODEL.ROI_DIGIT_HEAD = CfgNode(new_allowed=True)
+    cfg.MODEL.ROI_DIGIT_HEAD.NUM_DIGITS = 10

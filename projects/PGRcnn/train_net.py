@@ -24,7 +24,7 @@ def main(args):
     return trainer.train()
 
 # cfg = get_cfg()
-# cfg.merge_from_file("./configs/pg_rcnn_r_50_FPN_3x.yaml")
+# cfg.merge_from_file("./configs/pg_rcnn_r_50_FPN_1x.yaml")
 # print(cfg)
 # vis.visualize_data(cfg)
 
@@ -38,11 +38,11 @@ if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
     args.num_gpus = 1
-    args.config_file = "configs/faster_rcnn_R_50_FPN_1x.yaml"
-    args.eval_only = True
-    args.resume = True
-    # args.config_file = "../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    # args.config_file = "configs/faster_rcnn_R_50_FPN_1x.yaml"
 
+    args.config_file = "configs/pg_rcnn_r_50_FPN_1x.yaml"
+    args.eval_only = False
+    args.resume = True
 
     # print("Command Line Args:", args)
     launch(
@@ -54,5 +54,5 @@ if __name__ == "__main__":
         args=(args,),
     )
     # cfg = get_cfg()
-    # cfg.merge_from_file("./configs/pg_rcnn_r_50_FPN_3x.yaml")
+    # cfg.merge_from_file("./configs/pg_rcnn_r_50_FPN_1x.yaml")
     # vis.visualize_data(cfg, set='test')

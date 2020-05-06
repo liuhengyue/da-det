@@ -12,7 +12,7 @@ if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     print(args)
     # lazy add config file
-    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_1x.yaml"
     args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
     cfg = setup(args)
     from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer

@@ -172,7 +172,24 @@ def transform_instance_annotations(
     # Note that bbox is 1d (per-instance bounding box)
     bbox = transforms.apply_box(bbox)
     # pad to (2, 4)
-    annotation["digit_bboxes"] = np.pad(bbox, [(0, MAX_DIGIT_PER_INSTANCE - bbox.shape[0]), (0, 0)], 'constant', constant_values=(0))
+    pad_len = MAX_DIGIT_PER_INSTANCE - bbox.shape[0]
+    digit_bboxes = np.pad(bbox, [(0, pad_len), (0, 0)], 'constant', constant_values=(0))
+    annotation["digit_bboxes"] = digit_bboxes
+    # add center fields ((center, left, right), (x, y, vis=0))
+    digit_centers = np.zeros((3, 3))
+    digit_centers_x = (digit_bboxes[:, 0] + digit_bboxes[:, 2]) / 2
+    digit_centers_y = (digit_bboxes[:, 1] + digit_bboxes[:, 3]) / 2
+    digit_centers_vis = 2 * ~ ((digit_centers_x == 0) & (digit_centers_y == 0))
+    digit_centers_triplet = np.stack((digit_centers_x, digit_centers_y, digit_centers_vis), axis=1)
+    if pad_len > 0:
+        digit_centers[:2, :] = digit_centers_triplet
+    else:
+        digit_centers[1:, :] = digit_centers_triplet
+    # shape (3, 3)
+    annotation["digit_centers"] = digit_centers
+    digit_scales_w = (digit_bboxes[:, 2] - digit_bboxes[:, 0])
+    digit_scales_h = (digit_bboxes[:, 3] - digit_bboxes[:, 1])
+    annotation["digit_scales"] = np.stack((digit_scales_w, digit_scales_h), axis=1)
     # pad for digit_ids
     annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])), 'constant', constant_values=(-1)).reshape((-1, 1))
     # reshape the category_id
@@ -268,6 +285,8 @@ def annotations_to_instances(annos, image_size, mask_format="polygon", digit_onl
                     gt_keypoints   (N, 4, 3)
                     gt_digit_boxes (N, 2, 4)
                     gt_digits      (N, 2, 1)
+                    gt_digit_centers (N, 3, 3) order: center, right, left
+                    gt_digit_scales (N, 2, 2)
                 k in [0, 2]
 
 
@@ -282,7 +301,6 @@ def annotations_to_instances(annos, image_size, mask_format="polygon", digit_onl
         classes = np.concatenate([obj["digit_ids"][np.where(obj["digit_ids"] > -1)] for obj in annos])
         # ids are solved by cfg in datatset
         classes = torch.tensor(classes, dtype=torch.int64).view(-1)
-        # todo: AssertionError: Adding a field of length 1 to a Instances of length 2
         target.gt_classes = classes
         return target
     # person bboxes
@@ -292,7 +310,7 @@ def annotations_to_instances(annos, image_size, mask_format="polygon", digit_onl
     # digit bbox list of [[],[]]
     boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
     # padding digit bboxes to (2, 4)
-    boxes = [np.pad(box, [(0, MAX_DIGIT_PER_INSTANCE - box.shape[0]), (0, 0)], 'constant', constant_values=(0)) for box in boxes]
+    # boxes = [np.pad(box, [(0, MAX_DIGIT_PER_INSTANCE - box.shape[0]), (0, 0)], 'constant', constant_values=(0)) for box in boxes]
     # boxes = [[BoxMode.convert(_obj, obj["bbox_mode"], BoxMode.XYXY_ABS) for _obj in obj["digit_bboxes"]] for obj in annos]
     # for obj in annos:
     #     print(obj["digit_bbox"])
@@ -306,6 +324,11 @@ def annotations_to_instances(annos, image_size, mask_format="polygon", digit_onl
     classes = [obj["digit_ids"] for obj in annos]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_digit_classes = classes
+    # add centers and scales
+    digit_centers = [obj["digit_centers"] for obj in annos]
+    digit_scales = [obj["digit_scales"] for obj in annos]
+    target.gt_digit_centers = Keypoints(digit_centers)
+    target.gt_digit_scales = torch.tensor(digit_scales, dtype=torch.float64)
 
     if len(annos) and "segmentation" in annos[0]:
         segms = [obj["segmentation"] for obj in annos]

@@ -54,7 +54,7 @@ if __name__ == "__main__":
     parser.add_argument("--conf-threshold", default=0.5, type=float, help="confidence threshold")
     args = parser.parse_args(get_default_args())
     # lazy add config file
-    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_3x.yaml"
+    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_1x.yaml"
     args.config_file = "./configs/faster_rcnn_R_50_FPN_1x.yaml"
     cfg = setup(args)
 

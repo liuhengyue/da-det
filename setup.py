@@ -124,7 +124,7 @@ setup(
     url="https://github.com/facebookresearch/detectron2",
     description="Detectron2 is FAIR's next-generation research "
     "platform for object detection and segmentation.",
-    packages=find_packages(exclude=("configs", "tests")),
+    packages=find_packages(exclude=("configs", "tests*")),
     package_data={"detectron2.model_zoo": get_model_zoo_configs()},
     python_requires=">=3.6",
     install_requires=[
@@ -143,7 +143,13 @@ setup(
     ],
     extras_require={
         "all": ["shapely", "psutil"],
-        "dev": ["flake8", "isort", "black==19.3b0", "flake8-bugbear", "flake8-comprehensions"],
+        "dev": [
+            "flake8",
+            "isort",
+            "black @ git+https://github.com/psf/black@673327449f86fce558adde153bb6cbe54bfebad2",
+            "flake8-bugbear",
+            "flake8-comprehensions",
+        ],
     },
     ext_modules=get_extensions(),
     cmdclass={"build_ext": torch.utils.cpp_extension.BuildExtension},

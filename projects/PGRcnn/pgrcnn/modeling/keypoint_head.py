@@ -122,10 +122,13 @@ def keypoint_rcnn_inference(pred_keypoint_logits, pred_instances):
     keypoint_results = heatmaps_to_keypoints(pred_keypoint_logits.detach(), bboxes_flat.detach())
     num_instances_per_image = [len(i) for i in pred_instances]
     keypoint_results = keypoint_results[:, :, [0, 1, 3]].split(num_instances_per_image, dim=0)
+    keypoint_logits = pred_keypoint_logits.split(num_instances_per_image, dim=0)
 
-    for keypoint_results_per_image, instances_per_image in zip(keypoint_results, pred_instances):
+    for keypoint_results_per_image, kpt_logits_per_image, instances_per_image in \
+            zip(keypoint_results, keypoint_logits, pred_instances):
         # keypoint_results_per_image is (num instances)x(num keypoints)x(x, y, score)
         instances_per_image.pred_keypoints = keypoint_results_per_image
+        instances_per_image.pred_keypoints_logits = kpt_logits_per_image
 
 
 @ROI_KEYPOINT_HEAD_REGISTRY.register()

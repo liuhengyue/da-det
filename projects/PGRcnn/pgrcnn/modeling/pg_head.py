@@ -9,7 +9,7 @@ from detectron2.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers, FastRC
 from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou, heatmaps_to_keypoints
 from detectron2.layers import cat
 from detectron2.utils.events import get_event_storage
-from pgrcnn.modeling.kpts2mat_head import build_digit_head
+from pgrcnn.modeling.kpts2digit_head import build_digit_head
 from pgrcnn.utils.ctnet_utils import ctdet_decode
 from pgrcnn.structures.digitboxes import DigitBoxes
 from pgrcnn.modeling.digit_head import DigitOutputLayers
@@ -71,24 +71,38 @@ class PGROIHeads(StandardROIHeads):
         """
         # shape (N, 3, 56, 56) (N, 2, 56, 56)
         center_heatmaps, scale_heatmaps = self.digit_head(kpts_heatmaps)
-        with torch.no_grad():
-            bboxes_flat = cat([b.proposal_boxes.tensor for b in instances], dim=0)
+
+        if self.training:
+            with torch.no_grad():
+                bboxes_flat = cat([b.proposal_boxes.tensor for b in instances], dim=0)
+                # (N, num of candidates, (x1, y1, x2, y2, score, center 0 /left 1/right 2)
+                detection = ctdet_decode(center_heatmaps, scale_heatmaps, bboxes_flat, K=self.num_ctdet_proposal)
+
+                detection_boxes = list(detection[..., :4].split([len(instance) for instance in instances]))
+                detection_ct_classes = list(detection[..., -1].split([len(instance) for instance in instances]))
+                # assign new fields to instances
+                for i, boxes in enumerate(detection_boxes):
+                    instances[i].proposal_digit_boxes = DigitBoxes(boxes)
+                    instances[i].proposal_digit_ct_classes = detection_ct_classes[i]
+
+
+            center_loss = ct_loss(center_heatmaps, instances, None)
+            scale_loss = hw_loss(scale_heatmaps, instances)
+            # keypoint_results = heatmaps_to_keypoints(center_heatmaps.detach(), bboxes_flat.detach())
+            return {'ct_loss': center_loss,
+                    'wh_loss': scale_loss}
+
+        else:
+            bboxes_flat = cat([b.pred_boxes.tensor for b in instances], dim=0)
             # (N, num of candidates, (x1, y1, x2, y2, score, center 0 /left 1/right 2)
             detection = ctdet_decode(center_heatmaps, scale_heatmaps, bboxes_flat, K=self.num_ctdet_proposal)
-
             detection_boxes = list(detection[..., :4].split([len(instance) for instance in instances]))
             detection_ct_classes = list(detection[..., -1].split([len(instance) for instance in instances]))
             # assign new fields to instances
             for i, boxes in enumerate(detection_boxes):
                 instances[i].proposal_digit_boxes = DigitBoxes(boxes)
                 instances[i].proposal_digit_ct_classes = detection_ct_classes[i]
-
-
-        center_loss = ct_loss(center_heatmaps, instances, None)
-        scale_loss = hw_loss(scale_heatmaps, instances)
-        # keypoint_results = heatmaps_to_keypoints(center_heatmaps.detach(), bboxes_flat.detach())
-        return {'ct_loss': center_loss,
-                'wh_loss': scale_loss}
+            return instances
 
     def _forward_digit_box(self, features, proposals):
         features = [features[f] for f in self.in_features]
@@ -97,25 +111,27 @@ class PGROIHeads(StandardROIHeads):
         box_features = self.digit_box_pooler(features, detection_boxes)
         box_features = self.digit_box_head(box_features)
         predictions = self.digit_box_predictor(box_features)
-        # extend the gt_digit_box and class shape to the total number of proposals
-        for p in proposals:
-            # (N, P, 1)
-            bbox_idx = p.proposal_digit_ct_classes.unsqueeze(-1).add(-1).clamp(min=0).long() #.repeat(1, 1, 4)
-            p.gt_digit_classes = torch.gather(p.gt_digit_classes, 1, bbox_idx)
-            # broadcast to (N, P, 4)
-            bbox_idx = bbox_idx.repeat(1, 1, 4)
-            p.gt_digit_boxes = DigitBoxes(torch.gather(p.gt_digit_boxes.tensor, 1, bbox_idx))
-            # p.gt_digit_classes = p.gt_digit_classes.unsqueeze(1).repeat_interleave(self.num_ctdet_proposal, dim=1)
-            # p.gt_digit_boxes = DigitBoxes(p.gt_digit_boxes.tensor.unsqueeze(1).repeat_interleave(self.num_ctdet_proposal, dim=1))
+
         if self.training:
+            # extend the gt_digit_box and class shape to the total number of proposals
+            for p in proposals:
+                # (N, P, 1)
+                bbox_idx = p.proposal_digit_ct_classes.unsqueeze(-1).add(-1).clamp(min=0).long()  # .repeat(1, 1, 4)
+                p.gt_digit_classes = torch.gather(p.gt_digit_classes, 1, bbox_idx)
+                # broadcast to (N, P, 4)
+                bbox_idx = bbox_idx.repeat(1, 1, 4)
+                p.gt_digit_boxes = DigitBoxes(torch.gather(p.gt_digit_boxes.tensor, 1, bbox_idx))
             if self.train_on_pred_boxes:
                 with torch.no_grad():
-                    pred_boxes = self.box_predictor.predict_boxes_for_gt_classes(
+                    pred_boxes = self.digit_box_predictor.predict_boxes_for_gt_classes(
                         predictions, proposals
                     )
                     for proposals_per_image, pred_boxes_per_image in zip(proposals, pred_boxes):
                         proposals_per_image.proposal_digit_boxes = Boxes(pred_boxes_per_image)
             return self.digit_box_predictor.losses(predictions, proposals)
+        else:
+            pred_instances, _ = self.digit_box_predictor.inference(predictions, proposals)
+            return pred_instances
 
 
     def _forward_kpts2proposal(self, kpts_heatmaps, instances):
@@ -179,7 +195,36 @@ class PGROIHeads(StandardROIHeads):
 
         return perspective_mats
 
+    def forward_with_given_boxes(
+        self, features: Dict[str, torch.Tensor], instances: List[Instances]
+    ) -> List[Instances]:
+        """
+        Use the given boxes in `instances` to produce other (non-box) per-ROI outputs.
 
+        This is useful for downstream tasks where a box is known, but need to obtain
+        other attributes (outputs of other heads).
+        Test-time augmentation also uses this.
+
+        Args:
+            features: same as in `forward()`
+            instances (list[Instances]): instances to predict other outputs. Expect the keys
+                "pred_boxes" and "pred_classes" to exist.
+
+        Returns:
+            instances (list[Instances]):
+                the same `Instances` objects, with extra
+                fields such as `pred_masks` or `pred_keypoints`.
+        """
+        assert not self.training
+        assert instances[0].has("pred_boxes") and instances[0].has("pred_classes")
+
+        instances = self._forward_mask(features, instances)
+        instances = self._forward_keypoint(features, instances)
+        keypoints_logits = cat([instance.pred_keypoints_logits for instance in instances], dim=0)
+        instances = self._forward_ctdet(keypoints_logits, instances)
+        instances = self._forward_digit_box(features, instances)
+
+        return instances
 
     def forward(
             self,

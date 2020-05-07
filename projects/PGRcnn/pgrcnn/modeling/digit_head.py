@@ -10,7 +10,7 @@ from detectron2.layers import Linear, ShapeSpec, batched_nms, cat
 from detectron2.modeling.box_regression import Box2BoxTransform, apply_deltas_broadcast
 from detectron2.structures import Boxes, Instances
 from detectron2.utils.events import get_event_storage
-from detectron2.structures.boxes import pairwise_iou
+from pgrcnn.structures.digitboxes import DigitBoxes
 
 __all__ = ["fast_rcnn_inference", "FastRCNNOutputLayers"]
 
@@ -122,9 +122,9 @@ def fast_rcnn_inference_single_image(
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
 
     result = Instances(image_shape)
-    result.pred_boxes = Boxes(boxes)
-    result.scores = scores
-    result.pred_classes = filter_inds[:, 1]
+    result.pred_digit_boxes = Boxes(boxes)
+    result.digit_scores = scores
+    result.pred_digit_classes = filter_inds[:, 1]
     return result, filter_inds[:, 0]
 
 
@@ -478,7 +478,7 @@ class DigitOutputLayers(nn.Module):
         boxes = self.predict_boxes(predictions, proposals)
         scores = self.predict_probs(predictions, proposals)
         image_shapes = [x.image_size for x in proposals]
-        return fast_rcnn_inference(
+        detections, kept_idx = fast_rcnn_inference(
             boxes,
             scores,
             image_shapes,
@@ -486,6 +486,13 @@ class DigitOutputLayers(nn.Module):
             self.test_nms_thresh,
             self.test_topk_per_image,
         )
+        # merge detection results
+        for i, detection in enumerate(detections):
+            num_ins = len(proposals[0])
+            proposals[i].pred_digit_boxes = DigitBoxes(detection.pred_digit_boxes.tensor.view(num_ins, -1, 4))
+            proposals[i].digit_scores = detection.digit_scores.view(num_ins, -1)
+            proposals[i].pred_digit_classes = detection.pred_digit_classes.view(num_ins, -1)
+        return proposals, kept_idx
 
     def predict_boxes_for_gt_classes(self, predictions, proposals):
         """
@@ -527,9 +534,11 @@ class DigitOutputLayers(nn.Module):
         if not len(proposals):
             return []
         _, proposal_deltas = predictions
-        num_prop_per_image = [len(p) for p in proposals]
-        proposal_boxes = [p.proposal_boxes for p in proposals]
+        proposal_boxes = [p.proposal_digit_boxes for p in proposals]
         proposal_boxes = proposal_boxes[0].cat(proposal_boxes).tensor
+        num_digit_proposal = proposal_boxes.shape[1]
+        num_prop_per_image = [len(p) * num_digit_proposal for p in proposals]
+        proposal_boxes = proposal_boxes.view(-1, 4)
         predict_boxes = apply_deltas_broadcast(
             self.box2box_transform, proposal_deltas, proposal_boxes
         )  # Nx(KxB)
@@ -543,7 +552,7 @@ class DigitOutputLayers(nn.Module):
                 for image i.
         """
         scores, _ = predictions
-        num_inst_per_image = [len(p) for p in proposals]
+        num_inst_per_image = [len(p) * p.proposal_digit_boxes.tensor.shape[1] for p in proposals]
         probs = F.softmax(scores, dim=-1)
         return probs.split(num_inst_per_image, dim=0)
 

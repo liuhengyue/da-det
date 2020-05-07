@@ -37,14 +37,13 @@ def main(args):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.num_gpus = 1
-    # args.config_file = "configs/faster_rcnn_R_50_FPN_1x.yaml"
+    # args.num_gpus = 1
 
-    args.config_file = "configs/pg_rcnn_r_50_FPN_1x.yaml"
-    args.eval_only = False
-    args.resume = True
+    # args.config_file = "configs/pg_rcnn_r_50_FPN_1x.yaml"
+    # args.config_file = "configs/faster_rcnn/faster_rcnn_R_50_FPN_1x.yaml"
+    # args.eval_only = True
+    # args.resume = False
 
-    # print("Command Line Args:", args)
     launch(
         main,
         args.num_gpus,

@@ -23,6 +23,13 @@ class DigitBoxes(Boxes):
     def to(self, device: str) -> "Boxes":
         return DigitBoxes(self.tensor.to(device))
 
+    def scale(self, scale_x: float, scale_y: float) -> None:
+        """
+        Scale the box with horizontal and vertical scaling factors
+        """
+        self.tensor[..., 0::2] *= scale_x
+        self.tensor[..., 1::2] *= scale_y
+
     def clip(self, box_size: BoxSizeType) -> None:
         """
         Clip (in place) the boxes by limiting x coordinates to the range [0, width]

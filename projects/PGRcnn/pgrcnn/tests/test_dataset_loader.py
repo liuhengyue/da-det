@@ -38,7 +38,7 @@ def visualize_training(batched_inputs, cfg):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.config_file = "../../configs/pg_rcnn_r_50_FPN_1x.yaml"
+    args.config_file = "../../configs/pg_rcnn/pg_rcnn_R_50_FPN_1x_test_2.yaml"
     # args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
     cfg = setup(args)
     dataloader = build_detection_train_loader(cfg, mapper=DatasetMapper(cfg, True))

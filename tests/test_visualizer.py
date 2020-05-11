@@ -7,8 +7,9 @@ import unittest
 import torch
 
 from detectron2.data import MetadataCatalog
-from detectron2.structures import BoxMode, Instances, RotatedBoxes
+from detectron2.structures import BoxMode, RotatedBoxes
 from detectron2.utils.visualizer import Visualizer
+from pgrcnn.structures.instances import CustomizedInstances as Instances
 
 
 class TestVisualizer(unittest.TestCase):

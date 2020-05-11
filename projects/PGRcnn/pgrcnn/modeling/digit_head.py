@@ -8,11 +8,12 @@ from torch.nn import functional as F
 from detectron2.config import configurable
 from detectron2.layers import Linear, ShapeSpec, batched_nms, cat
 from detectron2.modeling.box_regression import Box2BoxTransform, apply_deltas_broadcast
-from detectron2.structures import Boxes, Instances
+from detectron2.structures import Boxes
 from detectron2.utils.events import get_event_storage
 from pgrcnn.structures.digitboxes import DigitBoxes
+from pgrcnn.structures.instances import CustomizedInstances as Instances
 
-__all__ = ["fast_rcnn_inference", "FastRCNNOutputLayers"]
+__all__ = ["fast_rcnn_inference", "DigitOutputLayers"]
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ Naming convention:
 """
 
 
-def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, topk_per_image):
+def fast_rcnn_inference(boxes, scores, num_instances, image_shapes, score_thresh, nms_thresh, topk_per_image):
     """
     Call `fast_rcnn_inference_single_image` for all images.
 
@@ -56,6 +57,8 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
         scores (list[Tensor]): A list of Tensors of predicted class scores for each image.
             Element i has shape (Ri, K + 1), where Ri is the number of predicted objects
             for image i. Compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
+        num_instances (list[int]): A list of integers indicating the number of person instances
+            for each image.
         image_shapes (list[tuple]): A list of (width, height) tuples for each image in the batch.
         score_thresh (float): Only return detections with a confidence score exceeding this
             threshold.
@@ -71,15 +74,16 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
     """
     result_per_image = [
         fast_rcnn_inference_single_image(
-            boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
+            boxes_per_image, scores_per_image, num_instance, image_shape, score_thresh, nms_thresh, topk_per_image
         )
-        for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
+        for scores_per_image, boxes_per_image, num_instance, image_shape in \
+        zip(scores, boxes, num_instances, image_shapes)
     ]
     return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
 
 
 def fast_rcnn_inference_single_image(
-    boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image
+    boxes, scores, num_instance, image_shape, score_thresh, nms_thresh, topk_per_image
 ):
     """
     Single-image inference. Return bounding-box detection results by thresholding
@@ -96,7 +100,6 @@ def fast_rcnn_inference_single_image(
     if not valid_mask.all():
         boxes = boxes[valid_mask]
         scores = scores[valid_mask]
-
     scores = scores[:, :-1]
     num_bbox_reg_classes = boxes.shape[1] // 4
     # Convert to Boxes to use the `clip` function ...
@@ -109,6 +112,8 @@ def fast_rcnn_inference_single_image(
     # R' x 2. First column contains indices of the R predictions;
     # Second column contains indices of classes.
     filter_inds = filter_mask.nonzero()
+    # find the indices of each digit bbox in each person instance
+    instance_idx = filter_mask.view(num_instance, -1, num_bbox_reg_classes).nonzero()[:, 0]
     if num_bbox_reg_classes == 1:
         boxes = boxes[filter_inds[:, 0], 0]
     else:
@@ -120,11 +125,18 @@ def fast_rcnn_inference_single_image(
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
-
+    instance_idx = instance_idx[keep]
+    # count number of digit object for each instance
+    counts = torch.bincount(instance_idx, minlength=num_instance).tolist()
+    boxes = torch.split(boxes, counts)
+    scores = torch.split(scores, counts)
+    pred_digit_classes = torch.split(filter_inds[:, 1], counts)
     result = Instances(image_shape)
-    result.pred_digit_boxes = Boxes(boxes)
-    result.digit_scores = scores
-    result.pred_digit_classes = filter_inds[:, 1]
+    # these fields should have length num_instance
+    # instance_idx[0]
+    result.pred_digit_boxes = [Boxes(x) for x in boxes]
+    result.digit_scores = list(scores)
+    result.pred_digit_classes = list(pred_digit_classes)
     return result, filter_inds[:, 0]
 
 
@@ -478,20 +490,21 @@ class DigitOutputLayers(nn.Module):
         boxes = self.predict_boxes(predictions, proposals)
         scores = self.predict_probs(predictions, proposals)
         image_shapes = [x.image_size for x in proposals]
+        num_instances = [len(p) for p in proposals]
         detections, kept_idx = fast_rcnn_inference(
             boxes,
             scores,
+            num_instances,
             image_shapes,
             self.test_score_thresh,
             self.test_nms_thresh,
-            self.test_topk_per_image,
+            self.test_topk_per_image
         )
         # merge detection results
         for i, detection in enumerate(detections):
-            num_ins = len(proposals[0])
-            proposals[i].pred_digit_boxes = DigitBoxes(detection.pred_digit_boxes.tensor.view(num_ins, -1, 4))
-            proposals[i].digit_scores = detection.digit_scores.view(num_ins, -1)
-            proposals[i].pred_digit_classes = detection.pred_digit_classes.view(num_ins, -1)
+            proposals[i].pred_digit_boxes = detection.pred_digit_boxes
+            proposals[i].digit_scores = detection.digit_scores
+            proposals[i].pred_digit_classes = detection.pred_digit_classes
         return proposals, kept_idx
 
     def predict_boxes_for_gt_classes(self, predictions, proposals):

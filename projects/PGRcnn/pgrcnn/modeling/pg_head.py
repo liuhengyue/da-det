@@ -6,13 +6,14 @@ from detectron2.modeling import ROI_HEADS_REGISTRY, StandardROIHeads
 from detectron2.modeling.poolers import ROIPooler
 from detectron2.modeling.roi_heads import build_box_head
 from detectron2.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers, FastRCNNOutputs
-from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou, heatmaps_to_keypoints
+from detectron2.structures import Boxes, ImageList, pairwise_iou, heatmaps_to_keypoints
 from detectron2.layers import cat
 from detectron2.utils.events import get_event_storage
 from pgrcnn.modeling.kpts2digit_head import build_digit_head
 from pgrcnn.utils.ctnet_utils import ctdet_decode
 from pgrcnn.structures.digitboxes import DigitBoxes
 from pgrcnn.modeling.digit_head import DigitOutputLayers
+from pgrcnn.structures.instances import CustomizedInstances as Instances
 import kornia
 @ROI_HEADS_REGISTRY.register()
 class PGROIHeads(StandardROIHeads):
@@ -134,66 +135,66 @@ class PGROIHeads(StandardROIHeads):
             return pred_instances
 
 
-    def _forward_kpts2proposal(self, kpts_heatmaps, instances):
-        """
-        Forward logic from kpts heatmaps to perspective transform matrix
-
-        Arguments:
-            kpts_heatmaps:
-                A tensor of shape (N, K, S, S) where N is the total number
-            of instances in the batch, K is the number of keypoints, and S is the side length
-            of the keypoint heatmap. The values are spatial logits.
-        """
-        # shape (N, 10, 9)
-        perspective_mats = self.kpts2mat_head(kpts_heatmaps)
-        N, C, D = perspective_mats.shape
-        bboxes_flat = cat([b.proposal_boxes.tensor for b in instances], dim=0)
-        # Tensor of shape (#ROIs, #keypoints, 4) with the last dimension corresponding to
-        # (x, y, logit, score) for each keypoint.
-        keypoint_results = heatmaps_to_keypoints(kpts_heatmaps.detach(), bboxes_flat.detach())
-
-        # shape (N, 4, 2)
-        keypoint_results = keypoint_results[...,:2]
-        # repeat to correlate with perspective_mats --> (N*C, 4, 2)
-        keypoint_results = keypoint_results.repeat_interleave(C, dim=0)
-        # (N*C, 4, 3) --> (N*C, 3, 4)
-        keypoint_results = kornia.convert_points_to_homogeneous(keypoint_results).transpose_(1, 2)
-        # apply perspective_mats to the keypoints
-        perspective_mats = perspective_mats.view(N * C, 3, 3)
-        pred_digit_bboxes = torch.matmul(perspective_mats, keypoint_results).transpose_(1, 2)
-        # (N*C, 4, 2)
-        pred_digit_bboxes = kornia.convert_points_from_homogeneous(pred_digit_bboxes)
-        # shape (N, 2, 4)   xyxy reshape --> (2*N, 4)
-        gt_digit_bboxes = cat([b.gt_digit_boxes.tensor for b in instances], dim=0).view(-1, 4)
-        #########
-
-
-        # # repeat keypoints twice for one-to-one correspondence of digit bboxes (2*N, 4, 2)
-        # keypoint_results = keypoint_results.repeat_interleave(2, dim=0)
-        # # get index of valid gt digit bboxes
-        # valid_digit_bbox_idx = torch.all(digit_bboxes != 0, dim=-1).nonzero(as_tuple=True)
-        # # sample the valid digit bboxes and keypoints
-        # digit_bboxes = digit_bboxes[valid_digit_bbox_idx] # (N', 4)
-        # keypoint_results = keypoint_results[valid_digit_bbox_idx] # (N', 4, 2)
-        #
-        # # box to four points (N, 1, 1)
-        # x1 = digit_bboxes[..., 0].unsqueeze_(-1).unsqueeze_(-1)
-        # y1 = digit_bboxes[..., 1].unsqueeze_(-1).unsqueeze_(-1)
-        # x2 = digit_bboxes[..., 2].unsqueeze_(-1).unsqueeze_(-1)
-        # y2 = digit_bboxes[..., 3].unsqueeze_(-1).unsqueeze_(-1)
-        # top_left_pt = cat([x1, y1], dim=-1)
-        # top_right_pt = cat([x2, y1], dim=-1)
-        # bottom_right_pt = cat([x2, y2], dim=-1)
-        # bottom_left_pt = cat([x1, y2], dim=-1)
-        # # shape (N', 4, 2) N': num of rois, 4 points, (x, y) coords
-        # digit_bboxes = cat([top_left_pt, top_right_pt, bottom_right_pt, bottom_left_pt], dim=-2)
-        # # kornia takes in shape (N, 4, 2)
-        # gt_mats = kornia.get_perspective_transform(keypoint_results, digit_bboxes)
-        ###############
-
-
-
-        return perspective_mats
+    # def _forward_kpts2proposal(self, kpts_heatmaps, instances):
+    #     """
+    #     Forward logic from kpts heatmaps to perspective transform matrix
+    #
+    #     Arguments:
+    #         kpts_heatmaps:
+    #             A tensor of shape (N, K, S, S) where N is the total number
+    #         of instances in the batch, K is the number of keypoints, and S is the side length
+    #         of the keypoint heatmap. The values are spatial logits.
+    #     """
+    #     # shape (N, 10, 9)
+    #     perspective_mats = self.kpts2mat_head(kpts_heatmaps)
+    #     N, C, D = perspective_mats.shape
+    #     bboxes_flat = cat([b.proposal_boxes.tensor for b in instances], dim=0)
+    #     # Tensor of shape (#ROIs, #keypoints, 4) with the last dimension corresponding to
+    #     # (x, y, logit, score) for each keypoint.
+    #     keypoint_results = heatmaps_to_keypoints(kpts_heatmaps.detach(), bboxes_flat.detach())
+    #
+    #     # shape (N, 4, 2)
+    #     keypoint_results = keypoint_results[...,:2]
+    #     # repeat to correlate with perspective_mats --> (N*C, 4, 2)
+    #     keypoint_results = keypoint_results.repeat_interleave(C, dim=0)
+    #     # (N*C, 4, 3) --> (N*C, 3, 4)
+    #     keypoint_results = kornia.convert_points_to_homogeneous(keypoint_results).transpose_(1, 2)
+    #     # apply perspective_mats to the keypoints
+    #     perspective_mats = perspective_mats.view(N * C, 3, 3)
+    #     pred_digit_bboxes = torch.matmul(perspective_mats, keypoint_results).transpose_(1, 2)
+    #     # (N*C, 4, 2)
+    #     pred_digit_bboxes = kornia.convert_points_from_homogeneous(pred_digit_bboxes)
+    #     # shape (N, 2, 4)   xyxy reshape --> (2*N, 4)
+    #     gt_digit_bboxes = cat([b.gt_digit_boxes.tensor for b in instances], dim=0).view(-1, 4)
+    #     #########
+    #
+    #
+    #     # repeat keypoints twice for one-to-one correspondence of digit bboxes (2*N, 4, 2)
+    #     keypoint_results = keypoint_results.repeat_interleave(2, dim=0)
+    #     # get index of valid gt digit bboxes
+    #     valid_digit_bbox_idx = torch.all(digit_bboxes != 0, dim=-1).nonzero(as_tuple=True)
+    #     # sample the valid digit bboxes and keypoints
+    #     digit_bboxes = digit_bboxes[valid_digit_bbox_idx] # (N', 4)
+    #     keypoint_results = keypoint_results[valid_digit_bbox_idx] # (N', 4, 2)
+    #
+    #     # box to four points (N, 1, 1)
+    #     x1 = digit_bboxes[..., 0].unsqueeze_(-1).unsqueeze_(-1)
+    #     y1 = digit_bboxes[..., 1].unsqueeze_(-1).unsqueeze_(-1)
+    #     x2 = digit_bboxes[..., 2].unsqueeze_(-1).unsqueeze_(-1)
+    #     y2 = digit_bboxes[..., 3].unsqueeze_(-1).unsqueeze_(-1)
+    #     top_left_pt = cat([x1, y1], dim=-1)
+    #     top_right_pt = cat([x2, y1], dim=-1)
+    #     bottom_right_pt = cat([x2, y2], dim=-1)
+    #     bottom_left_pt = cat([x1, y2], dim=-1)
+    #     # shape (N', 4, 2) N': num of rois, 4 points, (x, y) coords
+    #     digit_bboxes = cat([top_left_pt, top_right_pt, bottom_right_pt, bottom_left_pt], dim=-2)
+    #     # kornia takes in shape (N, 4, 2)
+    #     gt_mats = kornia.get_perspective_transform(keypoint_results, digit_bboxes)
+    #     ###############
+    #
+    #
+    #
+    #     return perspective_mats
 
     def forward_with_given_boxes(
         self, features: Dict[str, torch.Tensor], instances: List[Instances]

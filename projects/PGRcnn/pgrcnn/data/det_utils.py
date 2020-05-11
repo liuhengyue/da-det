@@ -14,7 +14,7 @@ from detectron2.structures import (
     RotatedBoxes,
     polygons_to_bitmask,
 )
-from detectron2.structures.instances import Instances
+from pgrcnn.structures.instances import CustomizedInstances as Instances
 from pgrcnn.structures.digitboxes import DigitBoxes
 from detectron2.data import transforms as T
 from detectron2.data.catalog import MetadataCatalog

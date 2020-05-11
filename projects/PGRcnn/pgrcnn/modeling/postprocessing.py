@@ -1,7 +1,7 @@
 from torch.nn import functional as F
 
 from detectron2.layers import paste_masks_in_image
-from detectron2.structures import Instances
+from pgrcnn.structures.instances import CustomizedInstances as Instances
 
 def pgrcnn_postprocess(results, output_height, output_width, mask_threshold=0.5):
     """
@@ -33,19 +33,14 @@ def pgrcnn_postprocess(results, output_height, output_width, mask_threshold=0.5)
     output_boxes.scale(scale_x, scale_y)
     output_boxes.clip(results.image_size)
 
-    # digit output
+    # digit output, could be shape 0 tensor
     if results.has("pred_digit_boxes"):
-        digit_output_boxes = results.pred_digit_boxes
-    digit_output_boxes.scale(scale_x, scale_y)
-    digit_output_boxes.clip(results.image_size)
+        for digit_output_box in results.pred_digit_boxes:
+            digit_output_box.scale(scale_x, scale_y)
+            digit_output_box.clip(results.image_size)
 
-    # filter out empty digit boxes, then set field as list(tuple)
-    noempty_digit_idx = digit_output_boxes.nonempty()
-    # (N', 4)
-    noempty_digit_boxes_tensor = digit_output_boxes.tensor[noempty_digit_idx]
-    num_noempty = noempty_digit_idx.sum(dim=1).tolist()
-    # a tuple of shape (num instance, 4)
-    results.pred_digit_boxes = noempty_digit_boxes_tensor.split(num_noempty)
+    # list can not be indexed by tensor, so convert to list of ints
+
     results = results[output_boxes.nonempty()]
 
     if results.has("pred_masks"):

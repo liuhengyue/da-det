@@ -24,7 +24,7 @@ def main(args):
     return trainer.train()
 
 # cfg = get_cfg()
-# cfg.merge_from_file("./configs/pg_rcnn_r_50_FPN_1x.yaml")
+# cfg.merge_from_file("./configs/pg_rcnn_R_50_FPN_1x_test_2.yaml")
 # print(cfg)
 # vis.visualize_data(cfg)
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     # lazy add config file
     # args.num_gpus = 1
 
-    # args.config_file = "configs/pg_rcnn_r_50_FPN_1x.yaml"
+    # args.config_file = "configs/pg_rcnn_R_50_FPN_1x_test_2.yaml"
     # args.config_file = "configs/faster_rcnn/faster_rcnn_R_50_FPN_1x.yaml"
     # args.eval_only = True
     # args.resume = False
@@ -53,5 +53,5 @@ if __name__ == "__main__":
         args=(args,),
     )
     # cfg = get_cfg()
-    # cfg.merge_from_file("./configs/pg_rcnn_r_50_FPN_1x.yaml")
+    # cfg.merge_from_file("./configs/pg_rcnn_R_50_FPN_1x_test_2.yaml")
     # vis.visualize_data(cfg, set='test')

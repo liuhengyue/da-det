@@ -11,11 +11,11 @@ import tqdm
 from fvcore.common.file_io import PathManager
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
-from detectron2.structures import Boxes, BoxMode, Instances
+from detectron2.structures import Boxes, BoxMode
 from detectron2.utils.logger import setup_logger
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
 from launch_utils import setup
-
+from pgrcnn.structures.instances import CustomizedInstances as Instances
 def get_default_args():
     return ['--input', './output/inference/coco_instances_results.json',\
             '--output', './output/inference/vis',
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     parser.add_argument("--conf-threshold", default=0.5, type=float, help="confidence threshold")
     args = parser.parse_args(get_default_args())
     # lazy add config file
-    # args.config_file = "../../configs/pg_rcnn_r_50_FPN_1x.yaml"
+    # args.config_file = "../../configs/pg_rcnn_R_50_FPN_1x_test_2.yaml"
     args.config_file = "projects/PGRcnn/configs/faster_rcnn/faster_rcnn_R_50_FPN_1x.yaml"
     cfg = setup(args)
 

@@ -17,8 +17,8 @@ from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
 from launch_utils import setup
 from pgrcnn.structures.instances import CustomizedInstances as Instances
 def get_default_args():
-    return ['--input', './output/inference/coco_instances_results.json',\
-            '--output', './output/inference/vis',
+    return ['--input', 'output/pg_rcnn/test_video_2/inference/coco_instances_results.json',\
+            '--output', 'output/pg_rcnn/test_video_2/inference/vis',
             '--dataset', 'jerseynumbers_val']
 
 
@@ -26,13 +26,16 @@ def create_instances(predictions, image_size):
     ret = Instances(image_size)
 
     score = np.asarray([x["score"] for x in predictions])
-    chosen = (score > args.conf_threshold).nonzero()[0]
+    labels = [dataset_id_map(p["category_id"]) for p in predictions]
+    thresholds = np.asarray([args.p_conf_threshold if label == 0 else args.d_conf_threshold for label in labels])
+    chosen = (score > thresholds).nonzero()[0]
     score = score[chosen]
     bbox = np.asarray([predictions[i]["bbox"] for i in chosen])
     bbox = BoxMode.convert(bbox, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS) if bbox.size > 0 else bbox
 
-    labels = np.asarray([dataset_id_map(predictions[i]["category_id"]) for i in chosen])
-
+    labels = np.asarray([labels[i] for i in chosen])
+    keypoints = np.asarray([x["keypoints"] for x in predictions if "keypoints" in x]).reshape((-1, 4, 3))
+    # todo - customize for jersey number data
     ret.scores = score
     ret.pred_boxes = Boxes(bbox)
     ret.pred_classes = labels
@@ -46,18 +49,22 @@ def create_instances(predictions, image_size):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="A script that visualizes the json predictions from COCO or LVIS dataset."
+        description="A script that visualizes the json predictions from COCO or jerseynumbers_val dataset."
     )
-    parser.add_argument("--input", required=True, help="JSON file produced by the model")
-    parser.add_argument("--output", required=True, help="output directory")
-    parser.add_argument("--dataset", help="name of the dataset", default="coco_2017_val")
-    parser.add_argument("--conf-threshold", default=0.5, type=float, help="confidence threshold")
-    args = parser.parse_args(get_default_args())
+    # parser.add_argument("--input", required=True, help="JSON file produced by the model")
+    # parser.add_argument("--output", required=True, help="output directory")
+    # parser.add_argument("--dataset", help="name of the dataset", default="jerseynumbers_val")
+    parser.add_argument("--p-conf-threshold", default=0.5, type=float, help="person confidence threshold")
+    parser.add_argument("--d-conf-threshold", default=0.1, type=float, help="digit confidence threshold")
+    args = parser.parse_args()
     # lazy add config file
     # args.config_file = "../../configs/pg_rcnn_R_50_FPN_1x_test_2.yaml"
-    args.config_file = "projects/PGRcnn/configs/faster_rcnn/faster_rcnn_R_50_FPN_1x.yaml"
+    args.config_file = "configs/pg_rcnn/pg_rcnn_R_50_FPN_1x_test_2.yaml"
     cfg = setup(args)
-
+    # modify args from cfg
+    args.input = os.path.join(cfg.OUTPUT_DIR, "inference/coco_instances_results.json")
+    args.output = os.path.join(cfg.OUTPUT_DIR, "inference/vis")
+    args.dataset = cfg.DATASETS.TEST[0]
 
     with PathManager.open(args.input, "r") as f:
         predictions = json.load(f)

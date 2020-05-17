@@ -184,7 +184,8 @@ class FastRCNNOutputs(object):
         self.pred_proposal_deltas = pred_proposal_deltas
         self.smooth_l1_beta = smooth_l1_beta
         self.image_shapes = [x.image_size for x in proposals]
-        self.bg_class_ind = self.pred_class_logits.shape[1] - 1
+        # we set the bg class as the first class, so the digit id is consistent
+        self.bg_class_ind = 0
 
         if len(proposals):
             box_type = type(proposals[0].proposal_boxes)
@@ -232,14 +233,13 @@ class FastRCNNOutputs(object):
         """
         num_instances = self.gt_classes.numel()
         pred_classes = self.pred_class_logits.argmax(dim=1)
-        bg_class_ind = self.pred_class_logits.shape[1] - 1
 
-        fg_inds = (self.gt_classes >= 0) & (self.gt_classes < bg_class_ind)
+        fg_inds = (self.gt_classes >= 0) & (self.gt_classes < self.bg_class_ind)
         num_fg = fg_inds.nonzero().numel()
         fg_gt_classes = self.gt_classes[fg_inds]
         fg_pred_classes = pred_classes[fg_inds]
 
-        num_false_negative = (fg_pred_classes == bg_class_ind).nonzero().numel()
+        num_false_negative = (fg_pred_classes == self.bg_class_ind).nonzero().numel()
         num_accurate = (pred_classes == self.gt_classes).nonzero().numel()
         fg_num_accurate = (fg_pred_classes == fg_gt_classes).nonzero().numel()
 
@@ -290,7 +290,6 @@ class FastRCNNOutputs(object):
         cls_agnostic_bbox_reg = self.pred_proposal_deltas.size(1) == box_dim
         device = self.pred_proposal_deltas.device
 
-        bg_class_ind = self.pred_class_logits.shape[1] - 1
 
         # Box delta loss is only computed between the prediction for the gt class k
         # (if 0 <= k < bg_class_ind) and the target; there is no loss defined on predictions
@@ -299,7 +298,7 @@ class FastRCNNOutputs(object):
         # arg to smooth_l1_loss is False (otherwise it uses torch.mean internally
         # and would produce a nan loss).
         fg_inds = torch.nonzero(
-            (self.gt_classes >= 0) & (self.gt_classes < bg_class_ind), as_tuple=True
+            (self.gt_classes >= 0) & (self.gt_classes < self.bg_class_ind), as_tuple=True
         )[0]
         if cls_agnostic_bbox_reg:
             # pred_proposal_deltas only corresponds to foreground class for agnostic

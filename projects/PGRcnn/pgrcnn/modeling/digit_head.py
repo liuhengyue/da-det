@@ -206,6 +206,7 @@ class FastRCNNOutputs(object):
 
                     proposal_boxes = p.proposal_digit_boxes.flat()
                     # augment the empty box to size 1
+                    # todo: not sure if it will cause problem
                     empty_box_idx = ~proposal_boxes.nonempty()
                     proposal_boxes.tensor[empty_box_idx, 2:] += 1
                     # match proposal and gt here

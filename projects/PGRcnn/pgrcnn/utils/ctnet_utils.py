@@ -43,7 +43,7 @@ def _topk(scores, K=40):
 
     return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
 
-def ctdet_decode(heat, wh, rois, reg=None, cat_spec_wh=False, K=100):
+def ctdet_decode(heat, wh, rois, reg=None, cat_spec_wh=False, K=100, feature_scale=True):
     batch, cat, height, width = heat.size()
 
     # heat = torch.sigmoid(heat)
@@ -76,6 +76,9 @@ def ctdet_decode(heat, wh, rois, reg=None, cat_spec_wh=False, K=100):
         wh = wh.gather(2, clses_ind).view(batch, K, 2)
     else:
         wh = wh.view(batch, K, 2)
+    if feature_scale:
+        wh[..., 0:1] = (wh[..., 0:1] / width) * roi_widths
+        wh[..., 1:2] = (wh[..., 1:2] / height) * roi_heights
     clses = clses.view(batch, K, 1).float()
     scores = scores.view(batch, K, 1)
     bboxes = torch.cat([xs - wh[..., 0:1] / 2,

@@ -77,7 +77,8 @@ class PGROIHeads(StandardROIHeads):
             with torch.no_grad():
                 bboxes_flat = cat([b.proposal_boxes.tensor for b in instances], dim=0)
                 # (N, num of candidates, (x1, y1, x2, y2, score, center 0 /left 1/right 2)
-                detection = ctdet_decode(center_heatmaps, scale_heatmaps, bboxes_flat, K=self.num_ctdet_proposal)
+                detection = ctdet_decode(center_heatmaps, scale_heatmaps, bboxes_flat,
+                                         K=self.num_ctdet_proposal, feature_scale=True)
 
                 detection_boxes = list(detection[..., :4].split([len(instance) for instance in instances]))
                 detection_ct_classes = list(detection[..., -1].split([len(instance) for instance in instances]))
@@ -319,7 +320,7 @@ def ct_loss(pred_keypoint_logits, instances, normalizer):
 
     return keypoint_loss
 
-def hw_loss(pred_scale, instances, hw_weight=0.1):
+def hw_loss(pred_scale, instances, hw_weight=1.0):
     """
     instances (list[Instances]): A list of M Instances, where M is the batch size.
         These instances are predictions from the model
@@ -330,22 +331,24 @@ def hw_loss(pred_scale, instances, hw_weight=0.1):
 
     # get gt scale masks, the shape should be (N, 2, 56, 56)
     ft_side_len = pred_scale.shape[2]
-    gt_scale_maps = to_scale_mask(instances, ft_side_len)
+    gt_scale_maps = to_scale_mask(instances, ft_side_len, feature_scale=True)
     valid = gt_scale_maps > 0
     loss = hw_weight * F.l1_loss(pred_scale[valid], gt_scale_maps[valid])
 
     return loss
 
-def to_scale_mask(instances, ft_side_len):
+def to_scale_mask(instances, ft_side_len, feature_scale=True):
     dense_wh_maps = []
 
     for instances_per_image in instances:
         if len(instances_per_image) == 0:
             continue
+        # (N, 3, 3)
         cts = instances_per_image.gt_digit_centers.tensor
         N = cts.shape[0]
-        # (N, 2, 2)
+        # (N, 2 [two digit placeholders], 2[w, h])
         gt_wh = instances_per_image.gt_digit_scales
+        # this cause the memory vary
         dense_wh = torch.zeros((N, 2, ft_side_len, ft_side_len), dtype=torch.float64, device=cts.device)
         rois = instances_per_image.proposal_boxes.tensor
 
@@ -372,6 +375,10 @@ def to_scale_mask(instances, ft_side_len):
 
         x[x_boundary_inds] = ft_side_len - 1
         y[y_boundary_inds] = ft_side_len - 1
+
+        if feature_scale:
+            gt_wh[..., 0] *= scale_x
+            gt_wh[..., 1] *= scale_y
 
         valid_loc = (x >= 0) & (y >= 0) & (x < ft_side_len) & (y < ft_side_len)
         vis = cts[..., 2] > 0

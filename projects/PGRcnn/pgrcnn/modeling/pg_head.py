@@ -89,7 +89,7 @@ class PGROIHeads(StandardROIHeads):
 
 
             center_loss = ct_loss(center_heatmaps, instances, None)
-            scale_loss = hw_loss(scale_heatmaps, instances)
+            scale_loss = hw_loss(scale_heatmaps, instances, feature_scale=True)
             # keypoint_results = heatmaps_to_keypoints(center_heatmaps.detach(), bboxes_flat.detach())
             return {'ct_loss': center_loss,
                     'wh_loss': scale_loss}
@@ -320,7 +320,7 @@ def ct_loss(pred_keypoint_logits, instances, normalizer):
 
     return keypoint_loss
 
-def hw_loss(pred_scale, instances, hw_weight=1.0):
+def hw_loss(pred_scale, instances, hw_weight=1.0, feature_scale=True):
     """
     instances (list[Instances]): A list of M Instances, where M is the batch size.
         These instances are predictions from the model
@@ -331,10 +331,9 @@ def hw_loss(pred_scale, instances, hw_weight=1.0):
 
     # get gt scale masks, the shape should be (N, 2, 56, 56)
     ft_side_len = pred_scale.shape[2]
-    gt_scale_maps = to_scale_mask(instances, ft_side_len, feature_scale=True)
+    gt_scale_maps = to_scale_mask(instances, ft_side_len, feature_scale=feature_scale)
     valid = gt_scale_maps > 0
     loss = hw_weight * F.l1_loss(pred_scale[valid], gt_scale_maps[valid])
-
     return loss
 
 def to_scale_mask(instances, ft_side_len, feature_scale=True):

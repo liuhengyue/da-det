@@ -130,7 +130,8 @@ def fast_rcnn_inference_single_image(
     counts = torch.bincount(instance_idx, minlength=num_instance).tolist()
     boxes = torch.split(boxes, counts)
     scores = torch.split(scores, counts)
-    pred_digit_classes = torch.split(filter_inds[:, 1], counts)
+    # recover digit class ids by adding one
+    pred_digit_classes = torch.split(filter_inds[:, 1] + 1, counts)
     result = Instances(image_shape)
     # these fields should have length num_instance
     # instance_idx[0]
@@ -235,7 +236,7 @@ class FastRCNNOutputs(object):
         num_instances = self.gt_classes.numel()
         pred_classes = self.pred_class_logits.argmax(dim=1)
 
-        fg_inds = (self.gt_classes >= 0) & (self.gt_classes < self.bg_class_ind)
+        fg_inds = (self.gt_classes > self.bg_class_ind)
         num_fg = fg_inds.nonzero().numel()
         fg_gt_classes = self.gt_classes[fg_inds]
         fg_pred_classes = pred_classes[fg_inds]
@@ -284,6 +285,7 @@ class FastRCNNOutputs(object):
                 0.0,
                 reduction="sum",
             )
+        # todo: gt_proposal_deltas has inf
         gt_proposal_deltas = self.box2box_transform.get_deltas(
             self.proposals.tensor, self.gt_boxes.tensor
         )
@@ -298,14 +300,15 @@ class FastRCNNOutputs(object):
         # Empty fg_inds produces a valid loss of zero as long as the size_average
         # arg to smooth_l1_loss is False (otherwise it uses torch.mean internally
         # and would produce a nan loss).
+        # bg class is 0, so the fg inds is changed
         fg_inds = torch.nonzero(
-            (self.gt_classes >= 0) & (self.gt_classes < self.bg_class_ind), as_tuple=True
-        )[0]
+            (self.gt_classes > self.bg_class_ind), as_tuple=True)[0]
         if cls_agnostic_bbox_reg:
             # pred_proposal_deltas only corresponds to foreground class for agnostic
             gt_class_cols = torch.arange(box_dim, device=device)
         else:
-            fg_gt_classes = self.gt_classes[fg_inds]
+            # note: gt classes range from 1 to 10, so minus 1
+            fg_gt_classes = self.gt_classes[fg_inds] - 1
             # pred_proposal_deltas for class k are located in columns [b * k : b * k + b],
             # where b is the dimension of box representation (4 or 5)
             # Note that compared to Detectron1,
@@ -318,6 +321,7 @@ class FastRCNNOutputs(object):
             self.smooth_l1_beta,
             reduction="sum",
         )
+
         # The loss is normalized using the total number of regions (R), not the number
         # of foreground regions even though the box regression loss is only defined on
         # foreground regions. Why? Because doing so gives equal training influence to
@@ -330,6 +334,7 @@ class FastRCNNOutputs(object):
         # means that the single example in minibatch (1) and each of the 100 examples
         # in minibatch (2) are given equal influence.
         loss_box_reg = loss_box_reg / self.gt_classes.numel()
+
         return loss_box_reg
 
     def _predict_boxes(self):

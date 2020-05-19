@@ -10,11 +10,12 @@ MODEL:
     NUM_KEYPOINTS: 4
   DEVICE: cuda # cpu or cuda
   WEIGHTS: "../../model_final_a6e10b.pkl" # "./model_final_280758.pkl"
+#  WEIGHTS: ./output/pg_rcnn/test_video_1/model_0044999.pth
 #  WEIGHTS: "detectron2://COCO-Detection/faster_rcnn_R_50_FPN_3x/137849458/model_final_a6e10b.pkl"
   ROI_DIGIT_HEAD:
     NAME: Kpts2DigitHead
     TRANSFORM_DIM: 9
-    NUM_PROPOSAL: 10
+    NUM_PROPOSAL: 5
     NUM_CONV: 2
     CONV_DIM: 256
     NUM_FC: 0
@@ -33,8 +34,8 @@ INPUT:
 SOLVER:
   IMS_PER_BATCH: 8
   BASE_LR: 0.01 # when IMS_PER_BATCH = 16, LR is 0.02
-  STEPS: (25000, 40000)
-  MAX_ITER: 50000
+  STEPS: (15000, 25000)
+  MAX_ITER: 30000
 DATALOADER:
   NUM_WORKERS: 4
 TEST:

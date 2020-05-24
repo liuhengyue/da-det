@@ -46,7 +46,7 @@ def _topk(scores, K=40):
 def ctdet_decode(heat, wh, rois, reg=None, cat_spec_wh=False, K=100, feature_scale=True):
     batch, cat, height, width = heat.size()
 
-    # heat = torch.sigmoid(heat)
+    heat = torch.sigmoid(heat)
     # perform nms on heatmaps
     heat = _nms(heat)
 

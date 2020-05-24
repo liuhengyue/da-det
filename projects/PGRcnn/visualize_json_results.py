@@ -55,11 +55,11 @@ if __name__ == "__main__":
     # parser.add_argument("--output", required=True, help="output directory")
     # parser.add_argument("--dataset", help="name of the dataset", default="jerseynumbers_val")
     parser.add_argument("--p-conf-threshold", default=0.5, type=float, help="person confidence threshold")
-    parser.add_argument("--d-conf-threshold", default=0.1, type=float, help="digit confidence threshold")
+    parser.add_argument("--d-conf-threshold", default=0.5, type=float, help="digit confidence threshold")
     args = parser.parse_args()
     # lazy add config file
     # args.config_file = "../../configs/pg_rcnn_R_50_FPN_1x_test_2.yaml"
-    args.config_file = "configs/pg_rcnn/pg_rcnn_R_50_FPN_1x_test_2.yaml"
+    args.config_file = "configs/pg_rcnn/pg_rcnn_R_50_FPN_1x_test_1.yaml"
     cfg = setup(args)
     # modify args from cfg
     args.input = os.path.join(cfg.OUTPUT_DIR, "inference/coco_instances_results.json")

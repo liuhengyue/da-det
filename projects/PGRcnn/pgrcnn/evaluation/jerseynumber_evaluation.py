@@ -78,6 +78,7 @@ class JerseyNumberEvaluator(COCOEvaluator):
         # Test set json files do not contain annotations (evaluation must be
         # performed using the COCO evaluation server).
         self._do_evaluation = "annotations" in self._coco_api.dataset
+        self.digit_only = cfg.DATASETS.DIGIT_ONLY
 
 
     def _eval_predictions(self, tasks, predictions):
@@ -227,7 +228,7 @@ class JerseyNumberEvaluator(COCOEvaluator):
             # TODO this is ugly
             if "instances" in output:
                 instances = output["instances"].to(self._cpu_device)
-                prediction["instances"] = instances_to_coco_json(instances, input["image_id"])
+                prediction["instances"] = instances_to_coco_json(instances, input["image_id"], self.digit_only)
             if "proposals" in output:
                 prediction["proposals"] = output["proposals"].to(self._cpu_device)
             self._predictions.append(prediction)
@@ -313,6 +314,8 @@ def convert_to_coco_dict(dataset_name):
         {"id": id, "name": name}
         for id, name in enumerate(MetadataCatalog.get(dataset_name).thing_classes)
     ]
+    # check if it is digit only
+    digit_only = 'person' not in [cat['name'] for cat in categories]
 
     logger.info("Converting dataset dicts into COCO format")
     coco_images = []
@@ -330,50 +333,51 @@ def convert_to_coco_dict(dataset_name):
         anns_per_image = image_dict["annotations"]
         for annotation in anns_per_image:
             bbox_mode = annotation["bbox_mode"]
-            # add person annotation
-            coco_annotation = {}
-            bbox = annotation["person_bbox"]
-            bbox = BoxMode.convert(bbox, bbox_mode, BoxMode.XYWH_ABS)
-            if "keypoints" in annotation:
-                keypoints = annotation["keypoints"]  # list[int]
-                for idx, v in enumerate(keypoints):
-                    if idx % 3 != 2:
-                        # COCO's segmentation coordinates are floating points in [0, H or W],
-                        # but keypoint coordinates are integers in [0, H-1 or W-1]
-                        # For COCO format consistency we substract 0.5
-                        # https://github.com/facebookresearch/detectron2/pull/175#issuecomment-551202163
-                        keypoints[idx] = v - 0.5
-                if "num_keypoints" in annotation:
-                    num_keypoints = annotation["num_keypoints"]
+            if not digit_only:
+                # add person annotation
+                coco_annotation = {}
+                bbox = annotation["person_bbox"]
+                bbox = BoxMode.convert(bbox, bbox_mode, BoxMode.XYWH_ABS)
+                if "keypoints" in annotation:
+                    keypoints = annotation["keypoints"]  # list[int]
+                    for idx, v in enumerate(keypoints):
+                        if idx % 3 != 2:
+                            # COCO's segmentation coordinates are floating points in [0, H or W],
+                            # but keypoint coordinates are integers in [0, H-1 or W-1]
+                            # For COCO format consistency we substract 0.5
+                            # https://github.com/facebookresearch/detectron2/pull/175#issuecomment-551202163
+                            keypoints[idx] = v - 0.5
+                    if "num_keypoints" in annotation:
+                        num_keypoints = annotation["num_keypoints"]
+                    else:
+                        num_keypoints = sum(kp > 0 for kp in keypoints[2::3])
+                # COCO requirement: instance area
+                if "segmentation" in annotation:
+                    # Computing areas for instances by counting the pixels
+                    segmentation = annotation["segmentation"]
+                    # TODO: check segmentation type: RLE, BinaryMask or Polygon
+                    polygons = PolygonMasks([segmentation])
+                    area = polygons.area()[0].item()
                 else:
-                    num_keypoints = sum(kp > 0 for kp in keypoints[2::3])
-            # COCO requirement: instance area
-            if "segmentation" in annotation:
-                # Computing areas for instances by counting the pixels
-                segmentation = annotation["segmentation"]
-                # TODO: check segmentation type: RLE, BinaryMask or Polygon
-                polygons = PolygonMasks([segmentation])
-                area = polygons.area()[0].item()
-            else:
-                # Computing areas using bounding boxes
-                bbox_xy = BoxMode.convert(bbox, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
-                area = Boxes([bbox_xy]).area()[0].item()
-            # Add optional fields
-            if "keypoints" in annotation:
-                coco_annotation["keypoints"] = keypoints
-                coco_annotation["num_keypoints"] = num_keypoints
+                    # Computing areas using bounding boxes
+                    bbox_xy = BoxMode.convert(bbox, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
+                    area = Boxes([bbox_xy]).area()[0].item()
+                # Add optional fields
+                if "keypoints" in annotation:
+                    coco_annotation["keypoints"] = keypoints
+                    coco_annotation["num_keypoints"] = num_keypoints
 
-            if "segmentation" in annotation:
-                coco_annotation["segmentation"] = annotation["segmentation"]
+                if "segmentation" in annotation:
+                    coco_annotation["segmentation"] = annotation["segmentation"]
 
-            coco_annotation["id"] = len(coco_annotations) + 1
-            coco_annotation["image_id"] = coco_image["id"]
-            coco_annotation["bbox"] = [round(float(x), 3) for x in bbox]
-            coco_annotation["area"] = area
-            coco_annotation["category_id"] = annotation["category_id"]
-            coco_annotation["iscrowd"] = annotation.get("iscrowd", 0)
+                coco_annotation["id"] = len(coco_annotations) + 1
+                coco_annotation["image_id"] = coco_image["id"]
+                coco_annotation["bbox"] = [round(float(x), 3) for x in bbox]
+                coco_annotation["area"] = area
+                coco_annotation["category_id"] = annotation["category_id"]
+                coco_annotation["iscrowd"] = annotation.get("iscrowd", 0)
 
-            coco_annotations.append(coco_annotation)
+                coco_annotations.append(coco_annotation)
 
             for bbox_idx, bbox in enumerate(annotation["digit_bboxes"]):
                 # create a new dict with only COCO fields
@@ -429,7 +433,7 @@ def convert_to_coco_dict(dataset_name):
     }
     return coco_dict
 
-def instances_to_coco_json(instances, img_id):
+def instances_to_coco_json(instances, img_id, digit_only=True):
     """
     Dump an "Instances" object to a COCO-format json that's used for evaluation.
 
@@ -440,8 +444,8 @@ def instances_to_coco_json(instances, img_id):
     Returns:
         list[dict]: list of json annotations in COCO format.
     """
-    num_person_instance = len(instances)
-    if num_person_instance == 0:
+    num_instance = len(instances)
+    if num_instance == 0:
         return []
 
     boxes = instances.pred_boxes.tensor.numpy()
@@ -449,27 +453,28 @@ def instances_to_coco_json(instances, img_id):
     boxes = boxes.tolist()
     scores = instances.scores.tolist()
     classes = instances.pred_classes.tolist()
-
-    # convert digit related fields
-    digit_boxes = [digit_boxes.tensor.numpy() for digit_boxes in instances.pred_digit_boxes if len(digit_boxes) > 0]
-    if len(digit_boxes) > 0:
-        digit_boxes = np.concatenate([digit_boxes.tensor.numpy() for digit_boxes in instances.pred_digit_boxes if len(digit_boxes) > 0])
-        digit_boxes = BoxMode.convert(digit_boxes, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
-        digit_boxes = digit_boxes.tolist()
-        digit_scores = [score for digit_scores in instances.digit_scores if len(digit_scores) > 0 \
-                        for score in digit_scores.tolist()]
-        digit_classes = [cls for digit_classes in instances.pred_digit_classes if len(digit_classes) > 0 \
-                         for cls in digit_classes.tolist()]
-    else:
-        digit_scores, digit_classes = [], []
-    # todo: append the results for now
-    num_digit_instance = len(digit_boxes)
-    boxes = boxes + digit_boxes
-    scores = scores + digit_scores
-    classes = classes + digit_classes
-    assert len(boxes) == len(scores) == len(classes)
-    # todo: we have override the variable 'num_instance" here!
-    num_instance = num_person_instance + num_digit_instance
+    if not digit_only:
+        # convert digit related fields
+        digit_boxes = [digit_boxes.tensor.numpy() for digit_boxes in instances.pred_digit_boxes if len(digit_boxes) > 0]
+        if len(digit_boxes) > 0:
+            digit_boxes = np.concatenate([digit_boxes.tensor.numpy() for digit_boxes in instances.pred_digit_boxes if len(digit_boxes) > 0])
+            digit_boxes = BoxMode.convert(digit_boxes, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
+            digit_boxes = digit_boxes.tolist()
+            digit_scores = [score for digit_scores in instances.digit_scores if len(digit_scores) > 0 \
+                            for score in digit_scores.tolist()]
+            digit_classes = [cls for digit_classes in instances.pred_digit_classes if len(digit_classes) > 0 \
+                             for cls in digit_classes.tolist()]
+        else:
+            digit_scores, digit_classes = [], []
+        # todo: append the results for now
+        num_digit_instance = len(digit_boxes)
+        boxes = boxes + digit_boxes
+        scores = scores + digit_scores
+        classes = classes + digit_classes
+        assert len(boxes) == len(scores) == len(classes)
+        # todo: we have override the variable 'num_instance" here!
+        num_person_instance = num_instance
+        num_instance = num_instance + num_digit_instance
 
     has_mask = instances.has("pred_masks")
     if has_mask:
@@ -529,7 +534,8 @@ def _evaluate_predictions_on_coco(coco_gt, coco_results, iou_type, kpt_oks_sigma
     """
     assert len(coco_results) > 0
 
-    # iou_type options: [digit_bbox, person_bbox, keypoints]
+    # faster rcnn: digit_bbox
+    # pg rcnn iou_type options: [digit_bbox, person_bbox, keypoints]
     task_type = iou_type
     iou_type = 'bbox' if 'bbox' in iou_type else iou_type
 
@@ -568,17 +574,26 @@ def _evaluate_predictions_on_coco(coco_gt, coco_results, iou_type, kpt_oks_sigma
     return coco_eval
 
 def _filter_coco_results(coco_gt, coco_results, task_type):
+    # determine pg rcnn or other models
+    digit_gt_only = True
+    # determine the eval type
     person_only = (task_type in ["person_bbox", "keypoints"])
+
     # hack COCO object
     coco_gt_copy = copy.deepcopy(coco_gt)
     # modify 'cats'
     for k, v in coco_gt.cats.items():
         if v['name'] == "person":
             person_id = k
+            digit_gt_only = False
         if v['name'] == "person" and (not person_only):
             del coco_gt_copy.cats[k] # remove person cls
         if v['name'] != "person" and person_only:
             del coco_gt_copy.cats[k]
+    # if only find digit classes, do not modify
+    if digit_gt_only:
+        return coco_gt, coco_results
+
     # modify 'anns'
     for k, v in coco_gt.anns.items():
         if v['category_id'] == person_id and (not person_only):

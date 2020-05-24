@@ -133,7 +133,7 @@ def transform_proposals(dataset_dict, image_shape, transforms, min_box_side_len,
 
 
 def transform_instance_annotations(
-    annotation, transforms, image_size, *, keypoint_hflip_indices=None
+    annotation, transforms, image_size, *, keypoint_hflip_indices=None, pad=False
 ):
     """
     Apply transforms to box, segmentation and keypoints annotations of a single instance.
@@ -171,27 +171,47 @@ def transform_instance_annotations(
     bbox = BoxMode.convert(annotation["digit_bboxes"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
     # Note that bbox is 1d (per-instance bounding box)
     bbox = transforms.apply_box(bbox)
-    # pad to (2, 4)
-    pad_len = MAX_DIGIT_PER_INSTANCE - bbox.shape[0]
-    digit_bboxes = np.pad(bbox, [(0, pad_len), (0, 0)], 'constant', constant_values=(0))
-    annotation["digit_bboxes"] = digit_bboxes
-    # add center fields ((center, left, right), (x, y, vis=0))
-    digit_centers = np.zeros((3, 3))
-    digit_centers_x = (digit_bboxes[:, 0] + digit_bboxes[:, 2]) / 2
-    digit_centers_y = (digit_bboxes[:, 1] + digit_bboxes[:, 3]) / 2
-    digit_centers_vis = 2 * ~ ((digit_centers_x == 0) & (digit_centers_y == 0))
-    digit_centers_triplet = np.stack((digit_centers_x, digit_centers_y, digit_centers_vis), axis=1)
-    if pad_len > 0:
-        digit_centers[:2, :] = digit_centers_triplet
+    if pad:
+        # pad to (2, 4)
+        pad_len = MAX_DIGIT_PER_INSTANCE - bbox.shape[0]
+        bbox = np.pad(bbox, [(0, pad_len), (0, 0)], 'constant', constant_values=(0))
+
+        # add center fields ((center, left, right), (x, y, vis=0))
+        digit_centers = np.zeros((3, 3))
+        digit_centers_x = (bbox[:, 0] + bbox[:, 2]) / 2
+        digit_centers_y = (bbox[:, 1] + bbox[:, 3]) / 2
+        digit_centers_vis = 2 * ~ ((digit_centers_x == 0) & (digit_centers_y == 0))
+        digit_centers_triplet = np.stack((digit_centers_x, digit_centers_y, digit_centers_vis), axis=1)
+        if pad_len > 0:
+            digit_centers[:2, :] = digit_centers_triplet
+        else:
+            digit_centers[1:, :] = digit_centers_triplet
+        digit_scales_w = (bbox[:, 2] - bbox[:, 0])
+        digit_scales_h = (bbox[:, 3] - bbox[:, 1])
+        annotation["digit_bboxes"] = bbox
+        annotation["digit_centers"] = digit_centers
+        annotation["digit_scales"] = np.stack((digit_scales_w, digit_scales_h), axis=1)
+        annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])), 'constant', constant_values=(-1)).reshape((-1, 1))
     else:
-        digit_centers[1:, :] = digit_centers_triplet
-    # shape (3, 3)
-    annotation["digit_centers"] = digit_centers
-    digit_scales_w = (digit_bboxes[:, 2] - digit_bboxes[:, 0])
-    digit_scales_h = (digit_bboxes[:, 3] - digit_bboxes[:, 1])
-    annotation["digit_scales"] = np.stack((digit_scales_w, digit_scales_h), axis=1)
-    # pad for digit_ids
-    annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])), 'constant', constant_values=(-1)).reshape((-1, 1))
+        bbox = np.array(bbox, dtype=np.float32)
+        digit_centers_x = (bbox[:, 0] + bbox[:, 2]) / 2
+        digit_centers_y = (bbox[:, 1] + bbox[:, 3]) / 2
+        digit_scales_w = (bbox[:, 2] - bbox[:, 0])
+        digit_scales_h = (bbox[:, 3] - bbox[:, 1])
+        num_digit = bbox.shape[0]
+        annotation["digit_bboxes"] = bbox
+        annotation["digit_centers"] = np.stack((digit_centers_x, digit_centers_y), axis=1)
+        annotation["digit_scales"] = np.stack((digit_scales_w, digit_scales_h), axis=1)
+        annotation["digit_ids"] = np.array(annotation["digit_ids"], dtype=np.int32)
+        if num_digit == 0:
+            digit_ct_classes = np.array([], dtype=np.int32)
+        elif num_digit == 1:
+            digit_ct_classes = np.array([0], dtype=np.int32)
+        else: # 2
+            # todo: check if it is in order of left and right
+            digit_ct_classes = np.array([1, 2], dtype=np.int32)
+        annotation["digit_ct_classes"] = digit_ct_classes
+
     # reshape the category_id
     # annotation["category_id"] = np.array(annotation["category_id"])#.reshape((-1,))
     if "segmentation" in annotation:
@@ -262,7 +282,7 @@ def transform_keypoint_annotations(keypoints, transforms, image_size, keypoint_h
     return keypoints
 
 
-def annotations_to_instances(annos, image_size, mask_format="polygon", digit_only=False):
+def annotations_to_instances(annos, image_size, mask_format="polygon", digit_only=False, pad=False):
     """
     Create an :class:`Instances` object used by the models,
     from instance annotations in the dataset dict.
@@ -289,47 +309,76 @@ def annotations_to_instances(annos, image_size, mask_format="polygon", digit_onl
                     gt_digit_scales (N, 2, 2)
                 k in [0, 2]
 
+            if not pad:
+            Instances:
+                'fields':
+                    gt_boxes       (N, 4)
+                    gt_classes     (N)
+                    gt_keypoints   (N, 4, 3)
+                    gt_digit_boxes (N, M, 4)
+                    gt_digits      (N, M, 1)
+                    gt_digit_centers (N, M, 2)
+                    gt_digit_scales (N, M, 2)
+                k in [0, 2]
+
 
     """
     target = Instances(image_size)
     if digit_only:
-        boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
-        # remove padded boxes
-        boxes = np.concatenate([box[np.any(box > 0, axis=1)] for box in boxes])
-        boxes = target.gt_boxes = Boxes(boxes)
-        boxes.clip(image_size)
-        classes = np.concatenate([obj["digit_ids"][np.where(obj["digit_ids"] > -1)] for obj in annos])
-        # ids are solved by cfg in datatset
-        classes = torch.tensor(classes, dtype=torch.int64).view(-1)
-        target.gt_classes = classes
-        return target
+        if pad:
+            boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
+            # remove padded boxes
+            boxes = np.concatenate([box[np.any(box > 0, axis=1)] for box in boxes])
+            boxes = target.gt_boxes = Boxes(boxes)
+            boxes.clip(image_size)
+            classes = np.concatenate([obj["digit_ids"][np.where(obj["digit_ids"] > -1)] for obj in annos])
+            # ids are solved by cfg in datatset
+            classes = torch.tensor(classes, dtype=torch.int64).view(-1)
+            target.gt_classes = classes
+            return target
+        else:
+            # todo: implement this
+            pass
     # person bboxes
     boxes = [BoxMode.convert(obj["person_bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
     boxes = target.gt_boxes = Boxes(boxes)
     boxes.clip(image_size)
-    # digit bbox list of [[],[]]
-    boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
-    # padding digit bboxes to (2, 4)
-    # boxes = [np.pad(box, [(0, MAX_DIGIT_PER_INSTANCE - box.shape[0]), (0, 0)], 'constant', constant_values=(0)) for box in boxes]
-    # boxes = [[BoxMode.convert(_obj, obj["bbox_mode"], BoxMode.XYXY_ABS) for _obj in obj["digit_bboxes"]] for obj in annos]
-    # for obj in annos:
-    #     print(obj["digit_bbox"])
-    # print(boxes)
-    boxes = target.gt_digit_boxes = DigitBoxes(boxes)
-    boxes.clip(image_size)
     classes = [obj["category_id"] for obj in annos]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes
-    # digit classes (list obj), it should have the same first dim with person classes
-    classes = [obj["digit_ids"] for obj in annos]
-    classes = torch.tensor(classes, dtype=torch.int64)
-    target.gt_digit_classes = classes
-    # add centers and scales
-    digit_centers = [obj["digit_centers"] for obj in annos]
-    digit_scales = [obj["digit_scales"] for obj in annos]
-    target.gt_digit_centers = Keypoints(digit_centers)
-    target.gt_digit_scales = torch.tensor(digit_scales, dtype=torch.float64)
+    if pad:
+        # digit bbox list of [[],[]]
+        boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
+        boxes = target.gt_digit_boxes = DigitBoxes(boxes)
+        boxes.clip(image_size)
 
+        # digit classes (list obj), it should have the same first dim with person classes
+        classes = [obj["digit_ids"] for obj in annos]
+        classes = torch.tensor(classes, dtype=torch.int64)
+        target.gt_digit_classes = classes
+        # add centers and scales
+        digit_centers = [obj["digit_centers"] for obj in annos]
+        digit_scales = [obj["digit_scales"] for obj in annos]
+        target.gt_digit_centers = Keypoints(digit_centers)
+        target.gt_digit_scales = torch.tensor(digit_scales, dtype=torch.float64)
+    else:
+        boxes = [BoxMode.convert(obj["digit_bboxes"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
+        boxes = target.gt_digit_boxes = [Boxes(box) for box in boxes]
+        for box in boxes:
+            box.clip(image_size)
+        classes = [obj["digit_ids"] for obj in annos]
+        classes = [torch.tensor(cls, dtype=torch.int64) for cls in classes]
+        target.gt_digit_classes = classes
+        # add centers and scales
+        digit_centers = [obj["digit_centers"] for obj in annos]
+        digit_scales = [obj["digit_scales"] for obj in annos]
+        digit_ct_classes = [obj["digit_ct_classes"] for obj in annos]
+        target.gt_digit_centers = [torch.tensor(digit_center, dtype=torch.float32) \
+                                   for digit_center in digit_centers]
+        target.gt_digit_scales = [torch.tensor(digit_scale, dtype=torch.float32) \
+                                  for digit_scale in digit_scales]
+        target.gt_digit_ct_classes = [torch.tensor(digit_ct_class, dtype=torch.int64) \
+                                      for digit_ct_class in digit_ct_classes]
     if len(annos) and "segmentation" in annos[0]:
         segms = [obj["segmentation"] for obj in annos]
         if mask_format == "polygon":

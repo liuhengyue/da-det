@@ -40,9 +40,23 @@ class CustomizedInstances(Instances):
         """
         super().__init__(image_size, **kwargs)
 
+    def set(self, name: str, value: Any) -> None:
+        """
+        Set the field named `name` to `value`.
+        The length of `value` must be the number of instances,
+        and must agree with other existing fields in this object.
+        """
+        data_len = len(value)
+        if len(self._fields) and 'digit' not in name:
+            # we allow the instance to have different length
+            assert (
+                len(self) == data_len
+            ), "Adding a field of length {} to a Instances of length {}".format(data_len, len(self))
+        self._fields[name] = value
+
     # Tensor-like methods
     # add support for list of tensors
-    def to(self, device: str) -> "Instances":
+    def to(self, device: str) -> "CustomizedInstances":
         """
         Returns:
             Instances: all fields are called with a `to(device)`, if the field has this method.
@@ -56,7 +70,7 @@ class CustomizedInstances(Instances):
             ret.set(k, v)
         return ret
 
-    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instances":
+    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "CustomizedInstances":
         """
         Args:
             item: an index-like object and will be used to index all the fields.
@@ -73,9 +87,45 @@ class CustomizedInstances(Instances):
 
         ret = CustomizedInstances(self._image_size)
         for k, v in self._fields.items():
-            if type(v) == list and type(item) == torch.Tensor:
-                ret.set(k, list(compress(v, item.tolist())))
+            # item can be mask or index
+            if type(v) == list:
+                if type(item) == torch.bool: # bool tensor
+                    ret.set(k, list(compress(v, item.tolist())))
+                else: # index tensor
+                    ret.set(k, [v[idx] for idx in item.tolist()])
+
             else:
                 ret.set(k, v[item])
         return ret
 
+    @staticmethod
+    def cat(instance_lists: List["CustomizedInstances"]) -> "CustomizedInstances":
+        """
+        Args:
+            instance_lists (list[Instances])
+
+        Returns:
+            Instances
+        """
+        assert all(isinstance(i, CustomizedInstances) for i in instance_lists)
+        assert len(instance_lists) > 0
+        if len(instance_lists) == 1:
+            return instance_lists[0]
+
+        image_size = instance_lists[0].image_size
+        for i in instance_lists[1:]:
+            assert i.image_size == image_size
+        ret = CustomizedInstances(image_size)
+        for k in instance_lists[0]._fields.keys():
+            values = [i.get(k) for i in instance_lists]
+            v0 = values[0]
+            if isinstance(v0, torch.Tensor):
+                values = torch.cat(values, dim=0)
+            elif isinstance(v0, list):
+                values = list(itertools.chain(*values))
+            elif hasattr(type(v0), "cat"):
+                values = type(v0).cat(values)
+            else:
+                raise ValueError("Unsupported type {} for concatenation".format(type(v0)))
+            ret.set(k, values)
+        return ret

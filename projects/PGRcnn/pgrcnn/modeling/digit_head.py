@@ -100,7 +100,8 @@ def fast_rcnn_inference_single_image(
     if not valid_mask.all():
         boxes = boxes[valid_mask]
         scores = scores[valid_mask]
-    scores = scores[:, :-1]
+    # bg id is 0, so we get the last 10 classes
+    scores = scores[:, 1:]
     num_bbox_reg_classes = boxes.shape[1] // 4
     # Convert to Boxes to use the `clip` function ...
     boxes = Boxes(boxes.reshape(-1, 4))
@@ -110,7 +111,7 @@ def fast_rcnn_inference_single_image(
     # Filter results based on detection scores
     filter_mask = scores > score_thresh  # R x K
     # R' x 2. First column contains indices of the R predictions;
-    # Second column contains indices of classes.
+    # Second column contains indices of classes in terms of 0 - 9 class id.
     filter_inds = filter_mask.nonzero()
     # find the indices of each digit bbox in each person instance
     instance_idx = filter_mask.view(num_instance, -1, num_bbox_reg_classes).nonzero()[:, 0]

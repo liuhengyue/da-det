@@ -1,6 +1,7 @@
 import os
 import platform
 import logging
+import copy
 from collections import OrderedDict
 from pgrcnn.config import get_cfg
 from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, launch
@@ -34,6 +35,28 @@ def setup(args):
 
 
 class Trainer(DefaultTrainer):
+
+    def resume_or_load(self, resume=True, checkpointable=True):
+        """
+        If `resume==True`, and last checkpoint exists, resume from it and load all
+        checkpointables (eg. optimizer and scheduler).
+
+        Otherwise, load the model specified by the config (skip all checkpointables).
+
+        Args:
+            resume (bool): whether to do resume or not
+        """
+        if not checkpointable:
+            checkpoint = self.checkpointer._load_file(self.cfg.MODEL.WEIGHTS)
+            self.checkpointer._load_model(checkpoint)
+        else:
+            checkpoint = self.checkpointer.resume_or_load(self.cfg.MODEL.WEIGHTS, resume=resume)
+        self.start_iter = checkpoint.get("iteration", -1) if resume else -1
+        # The checkpoint stores the training iteration that just finished, thus we start
+        # at the next iteration (or iter zero if there's no checkpoint).
+        self.start_iter += 1
+
+
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         if output_folder is None:

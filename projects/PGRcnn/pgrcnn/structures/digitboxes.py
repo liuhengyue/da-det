@@ -3,7 +3,7 @@ from detectron2.structures.boxes import *
 class DigitBoxes(Boxes):
     """
     Here, the digit boxes for each instance is in shape of
-    (1, 2, 4) or (B, N, 2, 4). So for each person, it has two digits with zero paddings.
+    (1, M, 4) or (B, N, M, 4). So for each person, it has M digits.
     """
     BoxSizeType = Union[List[int], Tuple[int, int]]
 
@@ -15,7 +15,7 @@ class DigitBoxes(Boxes):
         device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device("cpu")
         tensor = torch.as_tensor(tensor, dtype=torch.float32, device=device)
         if tensor.numel() == 0:
-            tensor = torch.zeros(0, 2, 4, dtype=torch.float32, device=device)
+            tensor = torch.zeros(0, 0, 4, dtype=torch.float32, device=device)
         assert tensor.dim() > 2 and tensor.dim() < 5 and tensor.size(-1) == 4, tensor.size()
 
         self.tensor = tensor
@@ -82,7 +82,7 @@ class DigitBoxes(Boxes):
         subject to Pytorch's indexing semantics.
         """
         if isinstance(item, int):
-            return DigitBoxes(self.tensor[item].view(1, 2, 4))
+            return DigitBoxes(self.tensor[item].view(1, -1, 4))
         b = self.tensor[item]
         assert b.dim() > 2 and b.dim() < 5, "Indexing on Boxes with {} failed to return a matrix!".format(item)
         return DigitBoxes(b)

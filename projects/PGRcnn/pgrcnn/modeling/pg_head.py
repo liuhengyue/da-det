@@ -30,8 +30,8 @@ class PGROIHeads(StandardROIHeads):
         self._init_digit_head(cfg, input_shape)
 
     def _sample_digit_proposals(
-        self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor,
-            gt_digit_ct_classes: torch.Tensor, gt_digit_centers, gt_digit_scales) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Based on the matching between N proposals and M groundtruth,
         sample the proposals and set their classification labels.
@@ -58,27 +58,16 @@ class PGROIHeads(StandardROIHeads):
             # Label ignore proposals (-1 label)
             gt_classes[matched_labels == -1] = -1
 
-            gt_digit_ct_classes = gt_digit_ct_classes[matched_idxs]
-            # Label unmatched proposals (0 label from matcher) as background center -1
-            gt_digit_ct_classes[matched_labels <= 0] = -1
-
-            gt_digit_centers = gt_digit_centers[matched_idxs]
-            gt_digit_centers[matched_labels <= 0] = 0
-
-            gt_digit_scales = gt_digit_scales[matched_idxs]
-            gt_digit_scales[matched_labels <= 0] = 0
 
         else:
             gt_classes = torch.zeros_like(matched_idxs) + self.num_classes
-            gt_digit_ct_classes = torch.zeros_like(matched_idxs) - 1
 
         sampled_fg_idxs, sampled_bg_idxs = subsample_labels(
             gt_classes, self.batch_size_per_image, self.positive_sample_fraction, 0
         )
 
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
-        return sampled_idxs, gt_classes[sampled_idxs], gt_digit_ct_classes[sampled_idxs], \
-               gt_digit_centers[sampled_idxs], gt_digit_scales[sampled_idxs]
+        return sampled_idxs, gt_classes[sampled_idxs]
 
     def _init_digit_head(self, cfg, input_shape):
         """
@@ -119,6 +108,54 @@ class PGROIHeads(StandardROIHeads):
             cfg, ShapeSpec(channels=4, height=56, width=56)
         )
 
+    def _process_single_instance(self, detection, instance):
+        """
+        detecion_boxes: (3, 4)
+        instance: single instance of one image
+        """
+        boxes = Boxes(detection[..., :4])
+        boxes.clip(instance.image_size)
+        keep = boxes.nonempty()
+        boxes = boxes[keep]
+        detection_ct_classes = detection[..., -1]
+        # (1, 2, 4) -> (2, 4)
+        gt_digit_boxes = instance.gt_digit_boxes.flat()
+        # keep = gt_digit_boxes.nonempty()
+        # gt_digit_boxes = gt_digit_boxes[keep]
+        # gt_digit_ct_classes = instance.gt_digit_ct_classes
+        # (1, 2, 1) -> (2)
+        gt_digit_classes = instance.gt_digit_classes.view(-1)
+        # Keypoints (1, 3, 3)
+        # gt_digit_centers = instance.gt_digit_centers
+        # (1, 2, 2) -> (2, 2)
+        # gt_digit_scales = instance.gt_digit_scales.view(-1, 2)
+
+        # get ground-truth match based on iou
+        match_quality_matrix = pairwise_iou(
+            gt_digit_boxes, boxes
+        )
+        matched_idxs, matched_labels = self.proposal_matcher(match_quality_matrix)
+        # if gt_digit_classes is 0, then it is background
+        sampled_idxs, gt_digit_classes = \
+            self._sample_digit_proposals(matched_idxs, matched_labels, gt_digit_classes)
+
+        sampled_targets = matched_idxs[sampled_idxs]
+        # need centers as Keypoints of shape (N, 3, 3)
+        instance.proposal_digit_boxes = boxes[sampled_idxs]
+        instance.proposal_digit_ct_classes = detection_ct_classes
+        instance.gt_digit_boxes = gt_digit_boxes[sampled_targets]
+        instance.gt_digit_classes = gt_digit_classes
+        # instance.gt_digit_ct_classes = gt_digit_ct_classes[sampled_targets]
+        # instance.gt_digit_centers = Keypoints(gt_digit_centers.tensor[sampled_targets])
+        # instance.gt_digit_scales = gt_digit_scales[sampled_targets]
+        # instance.gt_num_digit_scales =  [sampled_targets.shape[0]]
+        # instance.gt_digit_centers = Keypoints(gt_digit_centers[None, ...].repeat_interleave( \
+        #     len_instances[i], 0))
+        # instances[i].gt_digit_scales = gt_digit_scales[None, ...].repeat_interleave( \
+        #     len_instances[i], 0)
+        return instance
+
+
     def _forward_ctdet(self, kpts_heatmaps, instances):
         """
         Forward logic from kpts heatmaps to digit centers and scales (centerNet)
@@ -136,47 +173,29 @@ class PGROIHeads(StandardROIHeads):
             with torch.no_grad():
                 bboxes_flat = cat([b.proposal_boxes.tensor for b in instances], dim=0)
                 # (N, num of candidates, (x1, y1, x2, y2, score, center 0 /left 1/right 2)
-                detection = ctdet_decode(center_heatmaps, scale_heatmaps, bboxes_flat,
+                detections = ctdet_decode(center_heatmaps, scale_heatmaps, bboxes_flat,
                                          K=self.num_ctdet_proposal, feature_scale=True)
                 # todo: has duplicate boxes
                 len_instances = [len(instance) for instance in instances]
-                detection_boxes = list(detection[..., :4].split(len_instances))
-                detection_boxes = [Boxes(box.view(-1, 4)) for box in detection_boxes]
-                detection_ct_classes = list(detection[..., -1].split(len_instances))
+                detections = list(detections.split(len_instances))
                 # assign new fields to instances
-                for i, boxes in enumerate(detection_boxes):
-                    # only get one copy of gt digit boxes and classes for now
-                    gt_digit_boxes = instances[i].gt_digit_boxes[0]
-                    gt_digit_ct_classes = instances[i].gt_digit_ct_classes[0]
-                    gt_digit_classes = instances[i].gt_digit_classes[0]
-                    gt_digit_centers = instances[i].gt_digit_centers[0]
-                    gt_digit_scales = instances[i].gt_digit_scales[0]
-                    # get ground-truth match based on iou
-                    match_quality_matrix = pairwise_iou(
-                        gt_digit_boxes, boxes
-                    )
-                    matched_idxs, matched_labels = self.proposal_matcher(match_quality_matrix)
-                    sampled_idxs, gt_digit_classes, gt_digit_ct_classes, gt_digit_centers, gt_digit_scales \
-                        = self._sample_digit_proposals(matched_idxs, matched_labels, gt_digit_classes,
-                                                       gt_digit_ct_classes, gt_digit_centers, gt_digit_scales)
-
-
-                    instances[i].proposal_digit_boxes = boxes[sampled_idxs]
-                    instances[i].proposal_digit_ct_classes = detection_ct_classes[i].view(-1)
-                    instances[i].gt_digit_boxes = gt_digit_boxes[matched_idxs[sampled_idxs]]
-                    instances[i].gt_digit_classes = gt_digit_classes
-                    instances[i].gt_digit_ct_classes = gt_digit_ct_classes
-                    instances[i].gt_digit_centers = gt_digit_centers
-                    instances[i].gt_digit_scales = gt_digit_scales
+                # per image
+                for i, (detection, instance) in enumerate(zip(detections, instances)):
+                    processed_instances = []
+                    for j in range(len(instance)):
+                        processed_instance = self._process_single_instance(detection[j], instance[j])
+                        processed_instances.append(processed_instance)
+                    instances[i] = Instances.cat(processed_instances)
 
 
 
 
-            center_loss = ct_loss(center_heatmaps, instances, None)
-            scale_loss = hw_loss(scale_heatmaps, instances, feature_scale=True)
-            # keypoint_results = heatmaps_to_keypoints(center_heatmaps.detach(), bboxes_flat.detach())
-            return {'ct_loss': center_loss,
-                    'wh_loss': scale_loss}
+            loss = ctdet_loss(center_heatmaps, scale_heatmaps, instances, None)
+            # center_loss = ct_loss(center_heatmaps, instances, None)
+            # scale_loss = hw_loss(scale_heatmaps, instances, feature_scale=True)
+            # return {'ct_loss': center_loss,
+            #         'wh_loss': scale_loss}
+            return loss
 
         else:
             bboxes_flat = cat([b.pred_boxes.tensor for b in instances], dim=0)
@@ -187,27 +206,19 @@ class PGROIHeads(StandardROIHeads):
             detection_ct_classes = list(detection[..., -1].split([len(instance) for instance in instances]))
             # assign new fields to instances
             for i, boxes in enumerate(detection_boxes):
-                instances[i].proposal_digit_boxes = DigitBoxes(boxes)
+                instances[i].proposal_digit_boxes = boxes
                 instances[i].proposal_digit_ct_classes = detection_ct_classes[i]
             return instances
 
     def _forward_digit_box(self, features, proposals):
         features = [features[f] for f in self.in_features]
         # most likely have empty boxes
-        detection_boxes = [x.proposal_digit_boxes.flat() for x in proposals]
+        detection_boxes = [Boxes(x.proposal_digit_boxes.view(-1, 4)) for x in proposals]
         box_features = self.digit_box_pooler(features, detection_boxes)
         box_features = self.digit_box_head(box_features)
         predictions = self.digit_box_predictor(box_features)
 
         if self.training:
-            # extend the gt_digit_box and class shape to the total number of proposals
-            for p in proposals:
-                # (N, P, 1)
-                bbox_idx = p.proposal_digit_ct_classes.unsqueeze(-1).add(-1).clamp(min=0).long()  # .repeat(1, 1, 4)
-                p.gt_digit_classes = torch.gather(p.gt_digit_classes, 1, bbox_idx)
-                # broadcast to (N, P, 4)
-                bbox_idx = bbox_idx.repeat(1, 1, 4)
-                p.gt_digit_boxes = DigitBoxes(torch.gather(p.gt_digit_boxes.tensor, 1, bbox_idx))
             if self.train_on_pred_boxes:
                 with torch.no_grad():
                     pred_boxes = self.digit_box_predictor.predict_boxes_for_gt_classes(
@@ -310,10 +321,9 @@ def ct_loss(pred_keypoint_logits, instances, normalizer):
         if len(instances_per_image) == 0:
             continue
         keypoints = instances_per_image.gt_digit_centers
-        vis = (~(keypoints == 0).all(dim=1)).float() * 2
-        keypoints = Keypoints(cat((keypoints, vis.unsqueeze_(1)), dim=1))
+        proposal_boxes = instances_per_image.proposal_boxes.tensor
         heatmaps_per_image, valid_per_image = keypoints.to_heatmap(
-            instances_per_image.proposal_boxes.tensor, keypoint_side_len
+            proposal_boxes, keypoint_side_len
         )
         heatmaps.append(heatmaps_per_image.view(-1))
         valid.append(valid_per_image.view(-1))
@@ -372,6 +382,77 @@ def hw_loss(pred_scale, instances, hw_weight=1.0, feature_scale=True):
     # loss = hw_weight * F.l1_loss(pred_scale, gt_scale_maps, reduction='sum') / N
     return loss
 
+def ctdet_loss(pred_keypoint_logits, pred_scale_logits, instances, normalizer):
+    """
+    Arguments:
+        pred_keypoint_logits (Tensor): A tensor of shape (N, K, S, S) where N is the total number
+            of instances in the batch, K is the number of keypoints, and S is the side length
+            of the keypoint heatmap. The values are spatial logits.
+        instances (list[Instances]): A list of M Instances, where M is the batch size.
+            These instances are predictions from the model
+            that are in 1:1 correspondence with pred_keypoint_logits.
+            Each Instances should contain a `gt_keypoints` field containing a `structures.Keypoint`
+            instance.
+        normalizer (float): Normalize the loss by this amount.
+            If not specified, we normalize by the number of visible keypoints in the minibatch.
+
+    Returns a scalar tensor containing the loss.
+    """
+    heatmaps = []
+    valid = []
+    scales = []
+    x_s = []
+    y_s = []
+
+    keypoint_side_len = pred_keypoint_logits.shape[2]
+    for instances_per_image in instances:
+        if len(instances_per_image) == 0:
+            continue
+        keypoints = instances_per_image.gt_digit_centers.tensor
+        scales_per_image = instances_per_image.gt_digit_scales
+        proposal_boxes = instances_per_image.proposal_boxes.tensor
+        # gt_num_digit_scales = instances_per_image.gt_num_digit_scales
+        heatmaps_per_image, scales_per_image, valid_per_image, x, y = keypoints_to_heatmap(\
+            keypoints, scales_per_image, proposal_boxes, keypoint_side_len)
+
+        heatmaps.append(heatmaps_per_image.view(-1))
+        valid.append(valid_per_image.view(-1))
+        scales.append(scales_per_image.view(-1, 2))
+        # scales.append(scales_per_image)
+        x_s.append(x.view(-1))
+        y_s.append(y.view(-1))
+
+    if len(heatmaps):
+        keypoint_targets = cat(heatmaps, dim=0)
+        valid = cat(valid, dim=0).to(dtype=torch.uint8)
+        valid = torch.nonzero(valid).squeeze(1)
+
+        scale_targets = cat(scales, dim=0)
+        x_s = cat(x_s, dim=0)
+        y_s = cat(y_s, dim=0)
+
+    # torch.mean (in binary_cross_entropy_with_logits) doesn't
+    # accept empty tensors, so handle it separately
+    if len(heatmaps) == 0 or valid.numel() == 0:
+        global _TOTAL_SKIPPED
+        _TOTAL_SKIPPED += 1
+        storage = get_event_storage()
+        storage.put_scalar("kpts_num_skipped_batches", _TOTAL_SKIPPED, smoothing_hint=False)
+        return {'ct_loss': pred_keypoint_logits.sum() * 0, 'wh_loss': pred_scale_logits.sum() * 0}
+    # pred_scale_logits[torch.stack((x_s, y_s), dim=-1).unsqueeze(1).repeat(1, 2, 1, 1)]
+    N, K, H, W = pred_keypoint_logits.shape
+    pred_keypoint_logits = pred_keypoint_logits.view(N * K, H * W)
+    pred_scale_logits = pred_scale_logits.repeat_interleave(3, dim=0)
+    valid_scale_logits = pred_scale_logits[valid, :, x_s[valid], y_s[valid]]
+    ct_loss = F.cross_entropy(
+        pred_keypoint_logits[valid], keypoint_targets[valid], reduction="sum"
+    ) / valid.numel()
+
+    wh_loss = F.l1_loss(valid_scale_logits, scale_targets[valid], reduction='sum') / valid.numel()
+
+
+    return {'ct_loss': ct_loss, 'wh_loss': wh_loss}
+
 def ct_hm_loss(pred_keypoint_logits, instances, normalizer):
     """
     Arguments:
@@ -422,6 +503,84 @@ def ct_hm_loss(pred_keypoint_logits, instances, normalizer):
     # keypoint_loss /= normalizer
 
     return keypoint_loss
+
+def keypoints_to_heatmap(
+    keypoints: torch.Tensor, scales: torch.Tensor, rois: torch.Tensor, heatmap_size: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Encode keypoint locations into a target heatmap for use in SoftmaxWithLoss across space.
+
+    Maps keypoints from the half-open interval [x1, x2) on continuous image coordinates to the
+    closed interval [0, heatmap_size - 1] on discrete image coordinates. We use the
+    continuous-discrete conversion from Heckbert 1990 ("What is the coordinate of a pixel?"):
+    d = floor(c) and c = d + 0.5, where d is a discrete coordinate and c is a continuous coordinate.
+
+    Arguments:
+        keypoints: tensor of keypoint locations in of shape (N, K, 3).
+        rois: Nx4 tensor of rois in xyxy format
+        heatmap_size: integer side length of square heatmap.
+
+    Returns:
+        heatmaps: A tensor of shape (N, K) containing an integer spatial label
+            in the range [0, heatmap_size**2 - 1] for each keypoint in the input.
+        valid: A tensor of shape (N, K) containing whether each keypoint is in
+            the roi or not.
+    """
+
+    if rois.numel() == 0:
+        return rois.new().long(), rois.new().long()
+    offset_x = rois[:, 0]
+    offset_y = rois[:, 1]
+    scale_x = heatmap_size / (rois[:, 2] - rois[:, 0])
+    scale_y = heatmap_size / (rois[:, 3] - rois[:, 1])
+
+    offset_x = offset_x[:, None]
+    offset_y = offset_y[:, None]
+    scale_x = scale_x[:, None]
+    scale_y = scale_y[:, None]
+
+    x = keypoints[..., 0]
+    y = keypoints[..., 1]
+
+    x_boundary_inds = x == rois[:, 2][:, None]
+    y_boundary_inds = y == rois[:, 3][:, None]
+
+    x = (x - offset_x) * scale_x
+    x = x.floor().long()
+    y = (y - offset_y) * scale_y
+    y = y.floor().long()
+
+    x[x_boundary_inds] = heatmap_size - 1
+    y[y_boundary_inds] = heatmap_size - 1
+
+    valid_loc = (x >= 0) & (y >= 0) & (x < heatmap_size) & (y < heatmap_size)
+    vis = keypoints[..., 2] > 0
+    valid = (valid_loc & vis).long()
+
+    lin_ind = y * heatmap_size + x
+    heatmaps = lin_ind * valid
+
+    # (N, 1, 2) or (N, 2, 2)
+    # N, k, d = scales.shape
+    # if k == 1:
+    #     scales = cat((scales, torch.zeros((N, 2, d), device=scales.device)), dim=1)
+    # else: # k == 2
+    #     scales = cat((torch.zeros((N, 1, d), device=scales.device), scales), dim=1)
+    #
+    # scales[..., 0] *= scale_x
+    # scales[..., 1] *= scale_y
+
+    # (N, 1, 2) or (N, 2, 2)
+    # scales = torch.split(scales, gt_num_digit_scales)
+    # for i, scale in enumerate(scales):
+    #     scale[..., 0] *= scale_x[i]
+    #     scale[..., 1] *= scale_y[i]
+    # scales = cat(scales, dim=0)
+    scales[..., 0] *= scale_x
+    scales[..., 1] *= scale_y
+
+    return heatmaps, scales, valid, x, y
+
 def to_scale_mask(instances, ft_side_len, feature_scale=True):
     dense_wh_maps = []
 

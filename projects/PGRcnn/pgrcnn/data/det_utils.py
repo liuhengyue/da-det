@@ -133,7 +133,7 @@ def transform_proposals(dataset_dict, image_shape, transforms, min_box_side_len,
 
 
 def transform_instance_annotations(
-    annotation, transforms, image_size, *, keypoint_hflip_indices=None, pad=False
+    annotation, transforms, image_size, *, keypoint_hflip_indices=None, pad=True
 ):
     """
     Apply transforms to box, segmentation and keypoints annotations of a single instance.
@@ -178,29 +178,37 @@ def transform_instance_annotations(
 
         # add center fields ((center, left, right), (x, y, vis=0))
         digit_centers = np.zeros((3, 3))
+        digit_scales = np.zeros((3, 2))
         digit_centers_x = (bbox[:, 0] + bbox[:, 2]) / 2
         digit_centers_y = (bbox[:, 1] + bbox[:, 3]) / 2
         digit_centers_vis = 2 * ~ ((digit_centers_x == 0) & (digit_centers_y == 0))
+        digit_scales_w = (bbox[:, 2] - bbox[:, 0])
+        digit_scales_h = (bbox[:, 3] - bbox[:, 1])
+        tmp_digit_scales = np.stack((digit_scales_w, digit_scales_h), axis=1)
         digit_centers_triplet = np.stack((digit_centers_x, digit_centers_y, digit_centers_vis), axis=1)
         if pad_len > 0:
             digit_centers[:2, :] = digit_centers_triplet
+            digit_scales[:2, :] = tmp_digit_scales
         else:
             digit_centers[1:, :] = digit_centers_triplet
-        digit_scales_w = (bbox[:, 2] - bbox[:, 0])
-        digit_scales_h = (bbox[:, 3] - bbox[:, 1])
+            digit_scales[1:, :] = tmp_digit_scales
+
         annotation["digit_bboxes"] = bbox
         annotation["digit_centers"] = digit_centers
-        annotation["digit_scales"] = np.stack((digit_scales_w, digit_scales_h), axis=1)
+        annotation["digit_scales"] = digit_scales
         annotation["digit_ids"] = np.pad(annotation["digit_ids"], (0, MAX_DIGIT_PER_INSTANCE - len(annotation["digit_ids"])), 'constant', constant_values=(-1)).reshape((-1, 1))
     else:
         bbox = np.array(bbox, dtype=np.float32)
         digit_centers_x = (bbox[:, 0] + bbox[:, 2]) / 2
         digit_centers_y = (bbox[:, 1] + bbox[:, 3]) / 2
+        # add center fields ((center, left, right), (x, y, vis=0))
+        digit_centers = np.zeros((3, 3), dtype=np.float32)
+        digit_centers_vis = 2 * ~ ((digit_centers_x == 0) & (digit_centers_y == 0))
+        digit_centers_triplet = np.stack((digit_centers_x, digit_centers_y, digit_centers_vis), axis=1)
         digit_scales_w = (bbox[:, 2] - bbox[:, 0])
         digit_scales_h = (bbox[:, 3] - bbox[:, 1])
         num_digit = bbox.shape[0]
         annotation["digit_bboxes"] = bbox
-        annotation["digit_centers"] = np.stack((digit_centers_x, digit_centers_y), axis=1)
         annotation["digit_scales"] = np.stack((digit_scales_w, digit_scales_h), axis=1)
         annotation["digit_ids"] = np.array(annotation["digit_ids"], dtype=np.int32)
         if num_digit == 0:
@@ -211,6 +219,8 @@ def transform_instance_annotations(
             # todo: check if it is in order of left and right
             digit_ct_classes = np.array([1, 2], dtype=np.int32)
         annotation["digit_ct_classes"] = digit_ct_classes
+        digit_centers[digit_ct_classes, :] = digit_centers_triplet
+        annotation["digit_centers"] = digit_centers
 
     # reshape the category_id
     # annotation["category_id"] = np.array(annotation["category_id"])#.reshape((-1,))
@@ -282,7 +292,7 @@ def transform_keypoint_annotations(keypoints, transforms, image_size, keypoint_h
     return keypoints
 
 
-def annotations_to_instances(annos, image_size, mask_format="polygon", digit_only=False, pad=False):
+def annotations_to_instances(annos, image_size, mask_format="polygon", digit_only=False, pad=True):
     """
     Create an :class:`Instances` object used by the models,
     from instance annotations in the dataset dict.

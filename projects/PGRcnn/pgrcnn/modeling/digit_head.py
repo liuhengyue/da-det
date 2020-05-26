@@ -190,42 +190,18 @@ class FastRCNNOutputs(object):
         self.bg_class_ind = 0
 
         if len(proposals):
-            box_type = type(proposals[0].proposal_boxes)
-
-
-            # The following fields should exist only when training.
-            assert proposals[0].has("gt_digit_classes")
-            if proposals[0].has("gt_digit_boxes"):
-                boxes_list, class_list, proposal_list = [], [], []
-                for p in proposals:
-                    # do not filter out empty boxes, convert -1 cls to bg cls
-                    boxes = p.gt_digit_boxes.flat()
-
-                    # keep = boxes.nonempty(threshold=1)
-                    # boxes_list.append(boxes[keep])
-                    classes = p.gt_digit_classes.reshape((-1))
-                    classes[classes == -1] = self.bg_class_ind
-
-                    proposal_boxes = p.proposal_digit_boxes.flat()
-                    # augment the empty box to size 1
-                    # todo: not sure if it will cause problem
-                    empty_box_idx = ~proposal_boxes.nonempty()
-                    proposal_boxes.tensor[empty_box_idx, 2:] += 1
-                    # match proposal and gt here
-                    ious = paired_iou(proposal_boxes, boxes)
-                    classes[ious < 0.5] = self.bg_class_ind
-                    boxes_list.append(boxes)
-                    class_list.append(classes)
-                    proposal_list.append(proposal_boxes)
-
-                self.gt_boxes = box_type.cat(boxes_list)
-
-                self.gt_classes = cat(class_list, dim=0)
+            box_type = type(proposals[0].proposal_digit_boxes)
             # cat(..., dim=0) concatenates over all images in the batch
-            self.proposals = box_type.cat(proposal_list)
+            self.proposals = box_type.cat([p.proposal_digit_boxes for p in proposals])
             assert (
                 not self.proposals.tensor.requires_grad
             ), "Proposals should not require gradients!"
+
+            # The following fields should exist only when training.
+            if proposals[0].has("gt_digit_boxes"):
+                self.gt_boxes = box_type.cat([p.gt_digit_boxes for p in proposals])
+                assert proposals[0].has("gt_digit_classes")
+                self.gt_classes = cat([p.gt_digit_classes for p in proposals], dim=0)
         else:
             self.proposals = Boxes(torch.zeros(0, 4, device=self.pred_proposal_deltas.device))
         self._no_instances = len(proposals) == 0  # no instances found
@@ -553,11 +529,9 @@ class DigitOutputLayers(nn.Module):
         if not len(proposals):
             return []
         _, proposal_deltas = predictions
-        proposal_boxes = [p.proposal_digit_boxes for p in proposals]
-        proposal_boxes = proposal_boxes[0].cat(proposal_boxes).tensor
-        num_digit_proposal = proposal_boxes.shape[1]
-        num_prop_per_image = [len(p) * num_digit_proposal for p in proposals]
-        proposal_boxes = proposal_boxes.view(-1, 4)
+        proposal_boxes = [p.proposal_digit_boxes.view(-1, 4) for p in proposals]
+        num_prop_per_image = [p.shape[0] for p in proposal_boxes]
+        proposal_boxes = cat(proposal_boxes, dim=0)
         predict_boxes = apply_deltas_broadcast(
             self.box2box_transform, proposal_deltas, proposal_boxes
         )  # Nx(KxB)
@@ -571,7 +545,7 @@ class DigitOutputLayers(nn.Module):
                 for image i.
         """
         scores, _ = predictions
-        num_inst_per_image = [len(p) * p.proposal_digit_boxes.tensor.shape[1] for p in proposals]
+        num_inst_per_image = [p.proposal_digit_boxes.view(-1, 4).shape[0] for p in proposals]
         probs = F.softmax(scores, dim=-1)
         return probs.split(num_inst_per_image, dim=0)
 

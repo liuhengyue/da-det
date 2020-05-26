@@ -89,10 +89,12 @@ class CustomizedInstances(Instances):
         for k, v in self._fields.items():
             # item can be mask or index
             if type(v) == list:
-                if type(item) == torch.bool: # bool tensor
+                if item.dtype == torch.bool: # bool tensor
                     ret.set(k, list(compress(v, item.tolist())))
-                else: # index tensor
+                elif item.dtype == torch.Tensor: # index tensor
                     ret.set(k, [v[idx] for idx in item.tolist()])
+                else: # int index
+                    ret.set(k, v[item])
 
             else:
                 ret.set(k, v[item])
@@ -106,6 +108,7 @@ class CustomizedInstances(Instances):
 
         Returns:
             Instances
+            extended cat for other type like boxes and keypoints
         """
         assert all(isinstance(i, CustomizedInstances) for i in instance_lists)
         assert len(instance_lists) > 0
@@ -125,6 +128,8 @@ class CustomizedInstances(Instances):
                 values = list(itertools.chain(*values))
             elif hasattr(type(v0), "cat"):
                 values = type(v0).cat(values)
+            elif type(v0).__name__ == "Keypoints":
+                values = type(v0)(torch.cat([v.tensor for v in values], dim=0))
             else:
                 raise ValueError("Unsupported type {} for concatenation".format(type(v0)))
             ret.set(k, values)

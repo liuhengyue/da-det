@@ -16,7 +16,7 @@ from detectron2.modeling.matcher import Matcher
 from detectron2.modeling.poolers import ROIPooler
 from detectron2.modeling.sampling import subsample_labels
 from detectron2.modeling.roi_heads.box_head import build_box_head
-from detectron2.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers
+from pgrcnn.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers
 from detectron2.modeling.roi_heads.keypoint_head import build_keypoint_head
 from detectron2.modeling.roi_heads.mask_head import build_mask_head
 

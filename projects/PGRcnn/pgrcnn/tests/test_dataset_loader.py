@@ -4,7 +4,7 @@ from pgrcnn.data.custom_mapper import DatasetMapper
 from pgrcnn.data.build import build_detection_train_loader
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
 from detectron2.data import MetadataCatalog
-from launch_utils import setup
+from pgrcnn.utils.launch_utils import setup
 
 def visualize_training(batched_inputs, cfg):
     """

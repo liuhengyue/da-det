@@ -2,7 +2,7 @@ from detectron2.engine import default_argument_parser, launch
 import detectron2.utils.comm as comm
 from detectron2.evaluation import verify_results
 from detectron2.checkpoint import DetectionCheckpointer
-from launch_utils import setup, Trainer
+from pgrcnn.utils.launch_utils import setup, Trainer
 
 def main(args):
     cfg = setup(args)
@@ -20,7 +20,9 @@ def main(args):
         return res
 
     trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=args.resume, checkpointable=True)
+    # checkpointable = args.resume
+    checkpointable = False
+    trainer.resume_or_load(resume=args.resume, checkpointable=checkpointable)
     return trainer.train()
 
 # cfg = get_cfg()

@@ -1,7 +1,7 @@
 import os
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.engine import default_argument_parser
-from launch_utils import setup
+from pgrcnn.utils.launch_utils import setup
 
 # dataset test
 VIS_DATASET = True

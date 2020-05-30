@@ -11,9 +11,8 @@ from fvcore.common.file_io import PathManager
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import Boxes, BoxMode
-from detectron2.utils.logger import setup_logger
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
-from launch_utils import setup
+from pgrcnn.utils.launch_utils import setup
 from pgrcnn.structures.instances import CustomizedInstances as Instances
 
 
@@ -48,14 +47,14 @@ if __name__ == "__main__":
     )
     # parser.add_argument("--input", required=True, help="JSON file produced by the model")
     # parser.add_argument("--output", required=True, help="output directory")
-    parser.add_argument("--config-file", help="config file path", default="configs/pg_rcnn/pg_rcnn_test.yaml")
+    parser.add_argument("--config-file", help="config file path", default="configs/pg_rcnn/pg_rcnn_base.yaml")
     parser.add_argument("--dataset", help="name of the dataset", default="jerseynumbers_val")
     parser.add_argument("--p-conf-threshold", default=0.5, type=float, help="person confidence threshold")
     parser.add_argument("--d-conf-threshold", default=0.5, type=float, help="digit confidence threshold")
     args = parser.parse_args()
     # lazy add config file
     # args.config_file = "../../configs/pg_rcnn_R_50_FPN_1x_test_2.yaml"
-    args.config_file = "configs/pg_rcnn/pg_rcnn_test.yaml"
+    args.config_file = "projects/PGRcnn/configs/pg_rcnn/pg_rcnn_base.yaml"
     cfg = setup(args)
     # modify args from cfg
     args.input = os.path.join(cfg.OUTPUT_DIR, "inference/coco_instances_results.json")

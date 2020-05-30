@@ -62,7 +62,7 @@ class Trainer(DefaultTrainer):
         if output_folder is None:
             output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
         # could append other evaluations
-        evaluators = [JerseyNumberEvaluator(dataset_name, cfg, False, output_dir=output_folder)]
+        evaluators = [JerseyNumberEvaluator(dataset_name, cfg, True, output_dir=output_folder)]
         return DatasetEvaluators(evaluators)
 
     @classmethod

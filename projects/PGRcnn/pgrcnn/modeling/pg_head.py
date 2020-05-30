@@ -206,14 +206,14 @@ class PGROIHeads(StandardROIHeads):
             detection_ct_classes = list(detection[..., -1].split([len(instance) for instance in instances]))
             # assign new fields to instances
             for i, boxes in enumerate(detection_boxes):
-                instances[i].proposal_digit_boxes = boxes
+                instances[i].proposal_digit_boxes = Boxes(boxes.view(-1, 4))
                 instances[i].proposal_digit_ct_classes = detection_ct_classes[i]
             return instances
 
     def _forward_digit_box(self, features, proposals):
         features = [features[f] for f in self.in_features]
         # most likely have empty boxes
-        detection_boxes = [Boxes(x.proposal_digit_boxes.view(-1, 4)) for x in proposals]
+        detection_boxes = [x.proposal_digit_boxes for x in proposals]
         box_features = self.digit_box_pooler(features, detection_boxes)
         box_features = self.digit_box_head(box_features)
         predictions = self.digit_box_predictor(box_features)
@@ -260,6 +260,9 @@ class PGROIHeads(StandardROIHeads):
         keypoints_logits = cat([instance.pred_keypoints_logits for instance in instances], dim=0)
         instances = self._forward_ctdet(keypoints_logits, instances)
         instances = self._forward_digit_box(features, instances)
+        # remove proposal boxes
+        for instance in instances:
+            instance.remove('proposal_digit_boxes')
 
         return instances
 

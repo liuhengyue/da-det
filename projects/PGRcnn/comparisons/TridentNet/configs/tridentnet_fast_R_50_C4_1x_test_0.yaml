@@ -7,11 +7,9 @@ MODEL:
 DATASETS:
   TRAIN: ("jerseynumbers_train",)
   TEST: ("jerseynumbers_val",)
-  DIGIT_ONLY: False
+  DIGIT_ONLY: True
   TRAIN_VIDEO_IDS: [1,2,3]
   TEST_VIDEO_IDS: [0]
-INPUT:
-  MIN_SIZE_TRAIN: (640, 672, 704, 736)
   CROP:
     ENABLED: False
     SIZE: [0.5, 0.9]

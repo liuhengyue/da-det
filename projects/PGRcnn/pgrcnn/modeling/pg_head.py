@@ -445,8 +445,8 @@ def ctdet_loss(pred_keypoint_logits, pred_scale_logits, instances, normalizer):
     # pred_scale_logits[torch.stack((x_s, y_s), dim=-1).unsqueeze(1).repeat(1, 2, 1, 1)]
     N, K, H, W = pred_keypoint_logits.shape
     pred_keypoint_logits = pred_keypoint_logits.view(N * K, H * W)
-    pred_scale_logits = pred_scale_logits.repeat_interleave(3, dim=0)
-    valid_scale_logits = pred_scale_logits[valid, :, x_s[valid], y_s[valid]]
+    # pred_scale_logits = pred_scale_logits.repeat_interleave(3, dim=0)
+    valid_scale_logits = pred_scale_logits[valid // 3, :, x_s[valid], y_s[valid]]
     ct_loss = F.cross_entropy(
         pred_keypoint_logits[valid], keypoint_targets[valid], reduction="sum"
     ) / valid.numel()

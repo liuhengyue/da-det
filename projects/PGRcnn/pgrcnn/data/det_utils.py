@@ -18,6 +18,7 @@ from pgrcnn.structures.instances import CustomizedInstances as Instances
 from pgrcnn.structures.digitboxes import DigitBoxes
 from detectron2.data import transforms as T
 from detectron2.data.catalog import MetadataCatalog
+from pgrcnn.data import custom_transform_gen as custom_T
 
 # each person will only have at most 2 digits which we pad to
 MAX_DIGIT_PER_INSTANCE = 2
@@ -586,5 +587,15 @@ def build_transform_gen(cfg, is_train):
     # tfm_gens.append(T.RandomBrightness(0.2, 1.8))
     if is_train:
         # tfm_gens.append(T.RandomFlip())
+        if cfg.INPUT.AUG.GRAYSCALE:
+            tfm_gens.append(custom_T.ConvertGrayscale())
+        if cfg.INPUT.AUG.COLOR:
+            # tfm_gens.append(T.RandomLighting(scale=10.0))
+            tfm_gens.append(T.RandomBrightness(0.5, 1.5))
+            tfm_gens.append(T.RandomSaturation(0.5, 1.5))
+            tfm_gens.append(T.RandomContrast(0.5, 1.5))
+
+        if cfg.INPUT.AUG.EXTEND:
+            tfm_gens.append(T.RandomExtent((0.8, 1.5), (0.2, 0.2)))
         logger.info("TransformGens used in training: " + str(tfm_gens))
     return tfm_gens

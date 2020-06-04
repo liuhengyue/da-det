@@ -1,6 +1,6 @@
 import cv2
 from detectron2.engine import default_argument_parser
-from pgrcnn.data.custom_mapper import DatasetMapper
+from pgrcnn.data.custom_mapper import CustomDatasetMapper
 from pgrcnn.data.build import build_detection_train_loader
 from pgrcnn.utils.custom_visualizer import JerseyNumberVisualizer
 from detectron2.data import MetadataCatalog
@@ -38,13 +38,14 @@ def visualize_training(batched_inputs, cfg):
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
-    args.config_file = "../../configs/pg_rcnn/pg_rcnn_R_50_FPN_1x_test_2.yaml"
+    args.config_file = "../../configs/pg_rcnn/pg_rcnn_R_50_FPN_1x_extend_aug_test_0.yaml"
     # args.config_file = "../../configs/faster_rcnn_R_50_FPN_3x.yaml"
     cfg = setup(args)
-    dataloader = build_detection_train_loader(cfg, mapper=DatasetMapper(cfg, True))
-    data = next(iter(dataloader))
-    print(data)
-    visualize_training(data, cfg)
+    dataloader = build_detection_train_loader(cfg, mapper=CustomDatasetMapper(cfg, True))
+    # data = next(iter(dataloader))
+    # print(data)
+    # visualize_training(data, cfg)
 
-    # for data in dataloader:
-    #     print(data)
+    for data in dataloader:
+        # print(data)
+        visualize_training(data, cfg)

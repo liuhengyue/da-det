@@ -5,6 +5,8 @@ from detectron2.checkpoint import DetectionCheckpointer
 from pgrcnn.utils.launch_utils import setup, Trainer
 
 def main(args):
+    checkpointable = args.resume
+
     cfg = setup(args)
 
     if args.eval_only:
@@ -20,8 +22,8 @@ def main(args):
         return res
 
     trainer = Trainer(cfg)
-    # checkpointable = args.resume
-    checkpointable = False
+
+    # checkpointable = False
     trainer.resume_or_load(resume=args.resume, checkpointable=checkpointable)
     return trainer.train()
 

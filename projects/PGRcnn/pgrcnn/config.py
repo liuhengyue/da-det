@@ -27,3 +27,9 @@ def add_poseguide_config(cfg):
 
     _C.MODEL.ROI_DIGIT_HEAD = CfgNode(new_allowed=True)
     cfg.MODEL.ROI_DIGIT_HEAD.NUM_DIGITS = 10
+
+    # augmentation
+    _C.INPUT.AUG = CfgNode(new_allowed=True)
+    cfg.INPUT.AUG.COLOR = False
+    cfg.INPUT.AUG.GRAYSCALE = False
+    cfg.INPUT.AUG.EXTEND = False

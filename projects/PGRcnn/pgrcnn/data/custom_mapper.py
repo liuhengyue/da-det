@@ -92,7 +92,7 @@ class CustomDatasetMapper(DatasetMapper):
                 crop_tfm = utils.gen_crop_transform_with_instance(
                     self.crop_gen.get_crop_size(image.shape[:2]),
                     image.shape[:2],
-                    np.random.choice(dataset_dict["instances"]),
+                    np.random.choice(dataset_dict["annotations"]),
                 )
                 image = crop_tfm.apply_image(image)
             image, transforms = T.apply_transform_gens(self.tfm_gens, image)

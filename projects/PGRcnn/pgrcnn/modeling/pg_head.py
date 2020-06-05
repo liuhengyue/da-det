@@ -181,11 +181,18 @@ class PGROIHeads(StandardROIHeads):
                 # assign new fields to instances
                 # per image
                 for i, (detection, instance) in enumerate(zip(detections, instances)):
-                    processed_instances = []
-                    for j in range(len(instance)):
-                        processed_instance = self._process_single_instance(detection[j], instance[j])
-                        processed_instances.append(processed_instance)
-                    instances[i] = Instances.cat(processed_instances)
+                    if len(instance):
+                        processed_instances = []
+                        for j in range(len(instance)):
+                            processed_instance = self._process_single_instance(detection[j], instance[j])
+                            processed_instances.append(processed_instance)
+                        instances[i] = Instances.cat(processed_instances)
+                    else:
+                        device = instance.proposal_boxes.device
+                        instances[i].proposal_digit_boxes = Boxes(torch.zeros(0, 4, device=device))
+                        instances[i].proposal_digit_ct_classes = torch.zeros(0, device=device).long()
+                        instances[i].gt_digit_boxes = Boxes(torch.zeros(0, 4, device=device))
+                        instances[i].gt_digit_classes = torch.zeros(0, device=device).long()
 
 
 

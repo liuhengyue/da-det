@@ -142,7 +142,7 @@ class PGROIHeads(StandardROIHeads):
         sampled_targets = matched_idxs[sampled_idxs]
         # need centers as Keypoints of shape (N, 3, 3)
         instance.proposal_digit_boxes = boxes[sampled_idxs]
-        instance.proposal_digit_ct_classes = detection_ct_classes
+        instance.proposal_digit_ct_classes = detection_ct_classes[keep]
         instance.gt_digit_boxes = gt_digit_boxes[sampled_targets]
         instance.gt_digit_classes = gt_digit_classes
         # instance.gt_digit_ct_classes = gt_digit_ct_classes[sampled_targets]

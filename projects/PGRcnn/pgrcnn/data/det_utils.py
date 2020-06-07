@@ -585,10 +585,10 @@ def build_transform_gen(cfg, is_train):
     # tfm_gens.append(T.RandomExtent((1, 5), (0.9, 0.9)))
     tfm_gens.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     # tfm_gens.append(T.RandomBrightness(0.2, 1.8))
+    if cfg.INPUT.AUG.GRAYSCALE:
+        tfm_gens.append(custom_T.ConvertGrayscale())
     if is_train:
         # tfm_gens.append(T.RandomFlip())
-        if cfg.INPUT.AUG.GRAYSCALE:
-            tfm_gens.append(custom_T.ConvertGrayscale())
         if cfg.INPUT.AUG.COLOR:
             # tfm_gens.append(T.RandomLighting(scale=10.0))
             tfm_gens.append(T.RandomBrightness(0.5, 1.5))
@@ -596,6 +596,6 @@ def build_transform_gen(cfg, is_train):
             tfm_gens.append(T.RandomContrast(0.5, 1.5))
 
         if cfg.INPUT.AUG.EXTEND:
-            tfm_gens.append(T.RandomExtent((0.8, 1.5), (0.2, 0.2)))
+            tfm_gens.append(T.RandomExtent((1.2, 2.0), (0.4, 0.4)))
         logger.info("TransformGens used in training: " + str(tfm_gens))
     return tfm_gens

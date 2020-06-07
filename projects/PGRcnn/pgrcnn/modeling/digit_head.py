@@ -114,7 +114,10 @@ def fast_rcnn_inference_single_image(
     # Second column contains indices of classes in terms of 0 - 9 class id.
     filter_inds = filter_mask.nonzero()
     # find the indices of each digit bbox in each person instance
-    instance_idx = filter_mask.view(num_instance, -1, num_bbox_reg_classes).nonzero()[:, 0]
+    if num_instance:
+        instance_idx = filter_mask.view(num_instance, -1, num_bbox_reg_classes).nonzero()[:, 0]
+    else:
+        instance_idx = torch.zeros(0, device=filter_mask.device, dtype=torch.long)
     if num_bbox_reg_classes == 1:
         boxes = boxes[filter_inds[:, 0], 0]
     else:

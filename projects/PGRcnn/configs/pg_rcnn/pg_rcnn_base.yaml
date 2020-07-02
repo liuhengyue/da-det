@@ -9,11 +9,11 @@ MODEL:
     NAME: KPGRCNNHead
     NUM_KEYPOINTS: 4
   DEVICE: cuda # cpu or cuda
-#  WEIGHTS: "../../model_final_a6e10b.pkl"
-  WEIGHTS: model_0.pth
+  WEIGHTS: "model_final_a6e10b.pkl"
   ROI_DIGIT_HEAD:
     NAME: Kpts2DigitHead
     NUM_DIGIT_CLASSES: 10
+    DEFORMABLE: False
     TRANSFORM_DIM: 9
     NUM_PROPOSAL: 3
     NUM_CONV: 5

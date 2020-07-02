@@ -14,8 +14,10 @@ from detectron2.evaluation import DatasetEvaluators
 from pgrcnn.data.jerseynumbers import register_jerseynumbers
 from detectron2.modeling import DatasetMapperTTA
 from detectron2.modeling import GeneralizedRCNNWithTTA
+from projects.TridentNet.tridentnet import add_tridentnet_config
 def setup(args):
     cfg = get_cfg() # with added extra fields
+    add_tridentnet_config(cfg) # add config for tridentnet
     cfg.merge_from_file(args.config_file)
     # for mac os, change config to cpu
     if platform.system() == 'Darwin':

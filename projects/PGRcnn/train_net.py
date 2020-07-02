@@ -27,27 +27,14 @@ def main(args):
     trainer.resume_or_load(resume=args.resume, checkpointable=checkpointable)
     return trainer.train()
 
-# cfg = get_cfg()
-# cfg.merge_from_file("./configs/pg_rcnn_R_50_FPN_1x_test_2.yaml")
-# print(cfg)
-# vis.visualize_data(cfg)
-
-# train step
-# os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-# trainer = Trainer(cfg)
-# trainer.resume_or_load(resume=False)
-# trainer.train()
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     # lazy add config file
     # args.num_gpus = 1
-
     # args.config_file = "configs/pg_rcnn_R_50_FPN_1x_test_2.yaml"
-    # args.config_file = "configs/faster_rcnn/faster_rcnn_R_50_FPN_1x.yaml"
     # args.eval_only = True
     # args.resume = False
-
     launch(
         main,
         args.num_gpus,
@@ -56,6 +43,3 @@ if __name__ == "__main__":
         dist_url=args.dist_url,
         args=(args,),
     )
-    # cfg = get_cfg()
-    # cfg.merge_from_file("./configs/pg_rcnn_R_50_FPN_1x_test_2.yaml")
-    # vis.visualize_data(cfg, set='test')

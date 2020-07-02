@@ -6,8 +6,9 @@ from torch import nn
 from torch.nn import functional as F
 
 from detectron2.config import configurable
-from detectron2.layers import Conv2d, Linear, ShapeSpec, get_norm
+from detectron2.layers import Conv2d, Linear, ShapeSpec, get_norm, ModulatedDeformConv
 from detectron2.utils.registry import Registry
+from detectron2.modeling.backbone.resnet import DeformBottleneckBlock
 
 ROI_DIGIT_HEAD_REGISTRY = Registry("ROI_DIGIT_HEAD")
 
@@ -82,7 +83,8 @@ class Kpts2MatHead(nn.Module):
             "conv_dims": [conv_dim] * num_conv,
             "fc_dims": [fc_dim] * num_fc,
             "conv_norm": cfg.MODEL.ROI_DIGIT_HEAD.NORM,
-            "num_proposal": cfg.MODEL.ROI_DIGIT_HEAD.NUM_PROPOSAL
+            "num_proposal": cfg.MODEL.ROI_DIGIT_HEAD.NUM_PROPOSAL,
+            "use_deform": cfg.MODEL.ROI_DIGIT_HEAD.DEFORMABLE
         }
 
     @property
@@ -102,7 +104,7 @@ class Kpts2MatHead(nn.Module):
 class Kpts2DigitHead(nn.Module):
     @configurable
     def __init__(self, transform_dim: int, num_proposal: int, input_shape: ShapeSpec, *,
-                 conv_dims: List[int], fc_dims: List[int], conv_norm=""):
+                 conv_dims: List[int], fc_dims: List[int], use_deform, conv_norm=""):
         super().__init__()
         assert len(conv_dims) + len(fc_dims) > 0
 
@@ -128,19 +130,40 @@ class Kpts2DigitHead(nn.Module):
             self.conv_norm_relus.append(conv1)
             self._output_size = (1, self._output_size[1], self._output_size[2])
 
-        for k, conv_dim in enumerate(conv_dims):
-            conv = Conv2d(
-                self._output_size[0],
-                conv_dim,
-                kernel_size=3,
-                padding=1,
-                bias=not conv_norm,
-                norm=get_norm(conv_norm, conv_dim),
-                activation=F.relu,
-            )
-            self.add_module("conv{}".format(k + 1), conv)
-            self.conv_norm_relus.append(conv)
-            self._output_size = (conv_dim, self._output_size[1], self._output_size[2])
+        # normal conv or deformableConv v2
+        conv_op = DeformBottleneckBlock if use_deform else Conv2d
+
+        if use_deform:
+            num_groups = 1
+            width_per_group = 64
+            bottleneck_channels = num_groups * width_per_group
+            for k, conv_dim in enumerate(conv_dims):
+                conv = DeformBottleneckBlock(
+                    in_channels = self._output_size[0],
+                    out_channels = conv_dim,
+                    stride = 1,
+                    bottleneck_channels = bottleneck_channels,
+                    stride_in_1x1 = True,
+                    deform_modulated = True,
+                    norm = ''
+                )
+                self.add_module("deform_conv{}".format(k + 1), conv)
+                self.conv_norm_relus.append(conv)
+                self._output_size = (conv_dim, self._output_size[1], self._output_size[2])
+        else:
+            for k, conv_dim in enumerate(conv_dims):
+                conv = Conv2d(
+                    self._output_size[0],
+                    conv_dim,
+                    kernel_size=3,
+                    padding=1,
+                    bias=not conv_norm,
+                    norm=get_norm(conv_norm, conv_dim),
+                    activation=F.relu,
+                )
+                self.add_module("conv{}".format(k + 1), conv)
+                self.conv_norm_relus.append(conv)
+                self._output_size = (conv_dim, self._output_size[1], self._output_size[2])
 
         self.fcs = []
         for k, fc_dim in enumerate(fc_dims):
@@ -176,7 +199,8 @@ class Kpts2DigitHead(nn.Module):
         self.heads.append(scale_head)
 
         for layer in self.conv_norm_relus:
-            weight_init.c2_msra_fill(layer)
+            if type(layer).__name__ != 'DeformBottleneckBlock': #  already init in the block
+                weight_init.c2_msra_fill(layer)
         for layer in self.heads:
             weight_init.c2_msra_fill(layer)
         for layer in self.fcs:
@@ -207,7 +231,8 @@ class Kpts2DigitHead(nn.Module):
             "conv_dims": [conv_dim] * num_conv,
             "fc_dims": [fc_dim] * num_fc,
             "conv_norm": cfg.MODEL.ROI_DIGIT_HEAD.NORM,
-            "num_proposal": cfg.MODEL.ROI_DIGIT_HEAD.NUM_PROPOSAL
+            "num_proposal": cfg.MODEL.ROI_DIGIT_HEAD.NUM_PROPOSAL,
+            "use_deform": cfg.MODEL.ROI_DIGIT_HEAD.DEFORMABLE
         }
 
     @property

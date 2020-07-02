@@ -24,4 +24,4 @@ SOLVER:
   WARMUP_ITERS: 2000
 DATALOADER:
   NUM_WORKERS: 4
-OUTPUT_DIR: ../../output/trident_net/test_video_0
+OUTPUT_DIR: ./output/trident_net/test_video_0

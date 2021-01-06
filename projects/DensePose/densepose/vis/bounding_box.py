@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 from .base import RectangleVisualizer, TextVisualizer
 
 
@@ -13,7 +13,7 @@ class BoundingBoxVisualizer(object):
 
 
 class ScoredBoundingBoxVisualizer(object):
-    def __init__(self, bbox_visualizer_params=None, score_visualizer_params=None):
+    def __init__(self, bbox_visualizer_params=None, score_visualizer_params=None, **kwargs):
         if bbox_visualizer_params is None:
             bbox_visualizer_params = {}
         if score_visualizer_params is None:
@@ -25,7 +25,7 @@ class ScoredBoundingBoxVisualizer(object):
         boxes_xywh, box_scores = scored_bboxes
         assert len(boxes_xywh) == len(
             box_scores
-        ), "Number of bounding boxes {} should be equal to the number of " "scores".format(
+        ), "Number of bounding boxes {} should be equal to the number of scores {}".format(
             len(boxes_xywh), len(box_scores)
         )
         for i, box_xywh in enumerate(boxes_xywh):

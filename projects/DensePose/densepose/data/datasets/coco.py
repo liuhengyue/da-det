@@ -1,17 +1,24 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import contextlib
 import io
 import logging
 import os
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
-from fvcore.common.file_io import PathManager
 from fvcore.common.timer import Timer
 
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.structures import BoxMode
+from detectron2.utils.file_io import PathManager
 
-DENSEPOSE_KEYS = ["dp_x", "dp_y", "dp_I", "dp_U", "dp_V", "dp_masks"]
+from densepose.data.meshes.catalog import MeshCatalog
+
+from ..utils import maybe_prepend_base_path
+
+DENSEPOSE_MASK_KEY = "dp_masks"
+DENSEPOSE_KEYS_WITHOUT_MASK = ["dp_x", "dp_y", "dp_I", "dp_U", "dp_V"]
+DENSEPOSE_KEYS = DENSEPOSE_KEYS_WITHOUT_MASK + [DENSEPOSE_MASK_KEY]
 DENSEPOSE_METADATA_URL_PREFIX = "https://dl.fbaipublicfiles.com/densepose/data/"
 
 
@@ -44,9 +51,49 @@ DATASETS = [
         annotations_fpath="coco/annotations/densepose_valminusminival2014.json",
     ),
     CocoDatasetInfo(
+        name="densepose_coco_2014_train_cse",
+        images_root="coco/train2014",
+        annotations_fpath="coco_cse/densepose_train2014_cse.json",
+    ),
+    CocoDatasetInfo(
+        name="densepose_coco_2014_minival_cse",
+        images_root="coco/val2014",
+        annotations_fpath="coco_cse/densepose_minival2014_cse.json",
+    ),
+    CocoDatasetInfo(
+        name="densepose_coco_2014_minival_100_cse",
+        images_root="coco/val2014",
+        annotations_fpath="coco_cse/densepose_minival2014_100_cse.json",
+    ),
+    CocoDatasetInfo(
+        name="densepose_coco_2014_valminusminival_cse",
+        images_root="coco/val2014",
+        annotations_fpath="coco_cse/densepose_valminusminival2014_cse.json",
+    ),
+    CocoDatasetInfo(
         name="densepose_chimps",
         images_root="densepose_evolution/densepose_chimps",
         annotations_fpath="densepose_evolution/annotations/densepose_chimps_densepose.json",
+    ),
+    CocoDatasetInfo(
+        name="posetrack2017_train",
+        images_root="posetrack2017/posetrack_data_2017",
+        annotations_fpath="posetrack2017/densepose_posetrack_train2017.json",
+    ),
+    CocoDatasetInfo(
+        name="posetrack2017_val",
+        images_root="posetrack2017/posetrack_data_2017",
+        annotations_fpath="posetrack2017/densepose_posetrack_val2017.json",
+    ),
+    CocoDatasetInfo(
+        name="lvis_v05_train",
+        images_root="coco/train2017",
+        annotations_fpath="lvis/lvis_v0.5_plus_dp_train.json",
+    ),
+    CocoDatasetInfo(
+        name="lvis_v05_val",
+        images_root="coco/val2017",
+        annotations_fpath="lvis/lvis_v0.5_plus_dp_val.json",
     ),
 ]
 
@@ -70,24 +117,6 @@ BASE_DATASETS = [
 ]
 
 
-def _is_relative_local_path(path: os.PathLike):
-    path_str = os.fsdecode(path)
-    return ("://" not in path_str) and not os.path.isabs(path)
-
-
-def _maybe_prepend_base_path(base_path: Optional[os.PathLike], path: os.PathLike):
-    """
-    Prepends the provided path with a base path prefix if:
-    1) base path is not None;
-    2) path is a local path
-    """
-    if base_path is None:
-        return path
-    if _is_relative_local_path(path):
-        return os.path.join(base_path, path)
-    return path
-
-
 def get_metadata(base_path: Optional[os.PathLike]) -> Dict[str, Any]:
     """
     Returns metadata associated with COCO DensePose datasets
@@ -101,11 +130,9 @@ def get_metadata(base_path: Optional[os.PathLike]) -> Dict[str, Any]:
         Metadata in the form of a dictionary
     """
     meta = {
-        "densepose_transform_src": _maybe_prepend_base_path(
-            base_path, "UV_symmetry_transforms.mat"
-        ),
-        "densepose_smpl_subdiv": _maybe_prepend_base_path(base_path, "SMPL_subdiv.mat"),
-        "densepose_smpl_subdiv_transform": _maybe_prepend_base_path(
+        "densepose_transform_src": maybe_prepend_base_path(base_path, "UV_symmetry_transforms.mat"),
+        "densepose_smpl_subdiv": maybe_prepend_base_path(base_path, "SMPL_subdiv.mat"),
+        "densepose_smpl_subdiv_transform": maybe_prepend_base_path(
             base_path, "SMPL_SUBDIV_TRANSFORM.mat"
         ),
     }
@@ -192,6 +219,13 @@ def _maybe_add_densepose(obj: Dict[str, Any], ann_dict: Dict[str, Any]):
             obj[key] = ann_dict[key]
 
 
+def _maybe_add_cse_data(obj: Dict[str, Any], ann_dict: Dict[str, Any]):
+    if "dp_vertex" in ann_dict:
+        obj["vertex_ids"] = ann_dict["dp_vertex"]
+    if "ref_model" in ann_dict:
+        obj["mesh_id"] = MeshCatalog.get_mesh_id(ann_dict["ref_model"])
+
+
 def _combine_images_with_annotations(
     dataset_name: str,
     image_root: str,
@@ -201,6 +235,7 @@ def _combine_images_with_annotations(
 
     ann_keys = ["iscrowd", "category_id"]
     dataset_dicts = []
+    contains_video_frame_info = False
 
     for img_dict, ann_dicts in zip(img_datas, ann_datas):
         record = {}
@@ -209,6 +244,10 @@ def _combine_images_with_annotations(
         record["width"] = img_dict["width"]
         record["image_id"] = img_dict["id"]
         record["dataset"] = dataset_name
+        if "frame_id" in img_dict:
+            record["frame_id"] = img_dict["frame_id"]
+            record["video_id"] = img_dict.get("vid_id", None)
+            contains_video_frame_info = True
         objs = []
         for ann_dict in ann_dicts:
             assert ann_dict["image_id"] == record["image_id"]
@@ -218,10 +257,23 @@ def _combine_images_with_annotations(
             _maybe_add_segm(obj, ann_dict)
             _maybe_add_keypoints(obj, ann_dict)
             _maybe_add_densepose(obj, ann_dict)
+            _maybe_add_cse_data(obj, ann_dict)
             objs.append(obj)
         record["annotations"] = objs
         dataset_dicts.append(record)
+    if contains_video_frame_info:
+        create_video_frame_mapping(dataset_name, dataset_dicts)
     return dataset_dicts
+
+
+def create_video_frame_mapping(dataset_name, dataset_dicts):
+    mapping = defaultdict(dict)
+    for d in dataset_dicts:
+        video_id = d.get("video_id")
+        if video_id is None:
+            continue
+        mapping[video_id].update({d["frame_id"]: d["file_name"]})
+    MetadataCatalog.get(dataset_name).set(video_frame_mapping=mapping)
 
 
 def load_coco_json(annotations_json_file: str, image_root: str, dataset_name: str):
@@ -278,8 +330,8 @@ def register_dataset(dataset_data: CocoDatasetInfo, datasets_root: Optional[os.P
     datasets_root: Optional[os.PathLike]
         Datasets root folder (default: None)
     """
-    annotations_fpath = _maybe_prepend_base_path(datasets_root, dataset_data.annotations_fpath)
-    images_root = _maybe_prepend_base_path(datasets_root, dataset_data.images_root)
+    annotations_fpath = maybe_prepend_base_path(datasets_root, dataset_data.annotations_fpath)
+    images_root = maybe_prepend_base_path(datasets_root, dataset_data.images_root)
 
     def load_annotations():
         return load_coco_json(

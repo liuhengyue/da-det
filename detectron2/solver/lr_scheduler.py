@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import math
 from bisect import bisect_right
 from typing import List
@@ -92,7 +92,7 @@ def _get_warmup_factor_at_iter(
 ) -> float:
     """
     Return the learning rate warmup factor at a specific iteration.
-    See :paper:`in1k1h` for more details.
+    See :paper:`ImageNet in 1h` for more details.
 
     Args:
         method (str): warmup method; either "constant" or "linear".

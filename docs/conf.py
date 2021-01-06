@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 # flake8: noqa
 
@@ -17,7 +17,7 @@
 #
 import os
 import sys
-import mock
+from unittest import mock
 from sphinx.domains import Domain
 from typing import Dict, List, Tuple
 
@@ -57,9 +57,6 @@ class GithubURLDomain(Domain):
             return []
 
 
-# The suffix(es) of source filenames.
-# You can specify multiple suffix as a list of string:
-#
 # to support markdown
 from recommonmark.parser import CommonMarkParser
 
@@ -80,6 +77,7 @@ except ImportError:
         "torchvision", "torchvision.ops",
     ]:
         sys.modules[m] = mock.Mock(name=m)
+    sys.modules['torch'].__version__ = "1.5"  # fake version
 
 for m in [
     "cv2", "scipy", "portalocker", "detectron2._C",
@@ -186,6 +184,7 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+html_css_files = ["css/custom.css"]
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -260,17 +259,34 @@ texinfo_documents = [
 todo_include_todos = True
 
 
-_DEPRECATED_NAMES = set()
-
-
 def autodoc_skip_member(app, what, name, obj, skip, options):
     # we hide something deliberately
     if getattr(obj, "__HIDE_SPHINX_DOC__", False):
         return True
-    # Hide some names that are deprecated or not intended to be used
-    if name in _DEPRECATED_NAMES:
-        return True
-    return None
+
+    # Hide some that are deprecated or not intended to be used
+    HIDDEN = {
+        "ResNetBlockBase",
+        "GroupedBatchSampler",
+        "build_transform_gen",
+        "export_caffe2_model",
+        "export_onnx_model",
+        "apply_transform_gens",
+        "TransformGen",
+        "apply_augmentations",
+        "StandardAugInput",
+        "build_batch_data_loader",
+        "draw_panoptic_seg_predictions",
+    }
+    try:
+        if name in HIDDEN or (
+            hasattr(obj, "__doc__") and obj.__doc__.lower().strip().startswith("deprecated")
+        ):
+            print("Skipping deprecated object: {}".format(name))
+            return True
+    except:
+        pass
+    return skip
 
 
 _PAPER_DATA = {
@@ -288,7 +304,12 @@ _PAPER_DATA = {
     "cascade r-cnn": ("1712.00726", "Cascade R-CNN: Delving into High Quality Object Detection"),
     "lvis": ("1908.03195", "LVIS: A Dataset for Large Vocabulary Instance Segmentation"),
     "rrpn": ("1703.01086", "Arbitrary-Oriented Scene Text Detection via Rotation Proposals"),
-    "in1k1h": ("1706.02677", "Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour"),
+    "imagenet in 1h": ("1706.02677", "Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour"),
+    "xception": ("1610.02357", "Xception: Deep Learning with Depthwise Separable Convolutions"),
+    "mobilenet": (
+        "1704.04861",
+        "MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications",
+    ),
 }
 
 

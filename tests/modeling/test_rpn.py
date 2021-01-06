@@ -1,13 +1,17 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import logging
+import sys
 import unittest
 import torch
 
 from detectron2.config import get_cfg
+from detectron2.export.torchscript import export_torchscript_with_instances
+from detectron2.layers import ShapeSpec
 from detectron2.modeling.backbone import build_backbone
-from detectron2.modeling.proposal_generator.build import build_proposal_generator
-from detectron2.modeling.proposal_generator.rpn_outputs import find_top_rpn_proposals
+from detectron2.modeling.proposal_generator import RPN, build_proposal_generator
+from detectron2.modeling.proposal_generator.proposal_utils import find_top_rpn_proposals
 from detectron2.structures import Boxes, ImageList, Instances, RotatedBoxes
+from detectron2.utils.env import TORCH_VERSION
 from detectron2.utils.events import EventStorage
 
 logger = logging.getLogger(__name__)
@@ -17,11 +21,8 @@ class RPNTest(unittest.TestCase):
     def test_rpn(self):
         torch.manual_seed(121)
         cfg = get_cfg()
-        cfg.MODEL.PROPOSAL_GENERATOR.NAME = "RPN"
-        cfg.MODEL.ANCHOR_GENERATOR.NAME = "DefaultAnchorGenerator"
-        cfg.MODEL.RPN.BBOX_REG_WEIGHTS = (1, 1, 1, 1)
         backbone = build_backbone(cfg)
-        proposal_generator = build_proposal_generator(cfg, backbone.output_shape())
+        proposal_generator = RPN(cfg, backbone.output_shape())
         num_images = 2
         images_tensor = torch.rand(num_images, 20, 30)
         image_sizes = [(10, 10), (20, 30)]
@@ -76,6 +77,32 @@ class RPNTest(unittest.TestCase):
                 torch.allclose(proposal.proposal_boxes.tensor, expected_proposal_box.tensor)
             )
             self.assertTrue(torch.allclose(proposal.objectness_logits, expected_objectness_logit))
+
+    # https://github.com/pytorch/pytorch/issues/46964
+    @unittest.skipIf(
+        TORCH_VERSION < (1, 7) or sys.version_info.minor <= 6, "Insufficient pytorch version"
+    )
+    def test_rpn_scriptability(self):
+        cfg = get_cfg()
+        proposal_generator = RPN(cfg, {"res4": ShapeSpec(channels=1024, stride=16)}).eval()
+        num_images = 2
+        images_tensor = torch.rand(num_images, 30, 40)
+        image_sizes = [(32, 32), (30, 40)]
+        images = ImageList(images_tensor, image_sizes)
+        features = {"res4": torch.rand(num_images, 1024, 1, 2)}
+
+        fields = {"proposal_boxes": Boxes, "objectness_logits": torch.Tensor}
+        proposal_generator_ts = export_torchscript_with_instances(proposal_generator, fields)
+
+        proposals, _ = proposal_generator(images, features)
+        proposals_ts, _ = proposal_generator_ts(images, features)
+
+        for proposal, proposal_ts in zip(proposals, proposals_ts):
+            self.assertEqual(proposal.image_size, proposal_ts.image_size)
+            self.assertTrue(
+                torch.equal(proposal.proposal_boxes.tensor, proposal_ts.proposal_boxes.tensor)
+            )
+            self.assertTrue(torch.equal(proposal.objectness_logits, proposal_ts.objectness_logits))
 
     def test_rrpn(self):
         torch.manual_seed(121)
@@ -221,13 +248,41 @@ class RPNTest(unittest.TestCase):
                 err_msg,
             )
 
-    def test_rpn_proposals_inf(self):
+    def test_find_rpn_proposals_inf(self):
         N, Hi, Wi, A = 3, 3, 3, 3
         proposals = [torch.rand(N, Hi * Wi * A, 4)]
         pred_logits = [torch.rand(N, Hi * Wi * A)]
         pred_logits[0][1][3:5].fill_(float("inf"))
-        images = ImageList.from_tensors([torch.rand(3, 10, 10)] * 3)
-        find_top_rpn_proposals(proposals, pred_logits, images, 0.5, 1000, 1000, 0, False)
+        find_top_rpn_proposals(proposals, pred_logits, [(10, 10)], 0.5, 1000, 1000, 0, False)
+
+    @unittest.skipIf(TORCH_VERSION < (1, 7), "Insufficient pytorch version")
+    def test_find_rpn_proposals_tracing(self):
+        N, Hi, Wi, A = 3, 50, 50, 9
+        proposal = torch.rand(N, Hi * Wi * A, 4)
+        pred_logit = torch.rand(N, Hi * Wi * A)
+
+        def func(proposal, logit, image_size):
+            r = find_top_rpn_proposals(
+                [proposal], [logit], [image_size], 0.7, 1000, 1000, 0, False
+            )[0]
+            size = r.image_size
+            if not isinstance(size, torch.Tensor):
+                size = torch.tensor(size)
+            return (size, r.proposal_boxes.tensor, r.objectness_logits)
+
+        other_inputs = []
+        # test that it generalizes to other shapes
+        for Hi, Wi, shp in [(30, 30, 60), (10, 10, 800)]:
+            other_inputs.append(
+                (
+                    torch.rand(N, Hi * Wi * A, 4),
+                    torch.rand(N, Hi * Wi * A),
+                    torch.tensor([shp, shp]),
+                )
+            )
+        torch.jit.trace(
+            func, (proposal, pred_logit, torch.tensor([100, 100])), check_inputs=other_inputs
+        )
 
 
 if __name__ == "__main__":

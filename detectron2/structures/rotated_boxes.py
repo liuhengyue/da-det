@@ -1,6 +1,6 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import math
-from typing import Iterator, Union
+from typing import Any, Iterator, Tuple, Union
 import torch
 
 from detectron2.layers.rotated_boxes import pairwise_iou_rotated
@@ -41,9 +41,9 @@ class RotatedBoxes(Boxes):
         Mathematically, since the right-handed coordinate system for image space
         is (y, x), where y is top->down and x is left->right, the 4 vertices of the
         rotated rectangle :math:`(yr_i, xr_i)` (i = 1, 2, 3, 4) can be obtained from
-        the vertices of the horizontal rectangle (y_i, x_i) (i = 1, 2, 3, 4)
+        the vertices of the horizontal rectangle :math:`(y_i, x_i)` (i = 1, 2, 3, 4)
         in the following way (:math:`\\theta = angle*\\pi/180` is the angle in radians,
-        (y_c, x_c) is the center of the rectangle):
+        :math:`(y_c, x_c)` is the center of the rectangle):
 
         .. math::
 
@@ -229,8 +229,8 @@ class RotatedBoxes(Boxes):
         """
         return RotatedBoxes(self.tensor.clone())
 
-    def to(self, device: str) -> "RotatedBoxes":
-        return RotatedBoxes(self.tensor.to(device))
+    def to(self, *args: Any, **kwargs: Any) -> "RotatedBoxes":
+        return RotatedBoxes(self.tensor.to(*args, **kwargs))
 
     def area(self) -> torch.Tensor:
         """
@@ -249,7 +249,7 @@ class RotatedBoxes(Boxes):
         """
         self.tensor[:, 4] = (self.tensor[:, 4] + 180.0) % 360.0 - 180.0
 
-    def clip(self, box_size: Boxes.BoxSizeType, clip_angle_threshold: float = 1.0) -> None:
+    def clip(self, box_size: Tuple[int, int], clip_angle_threshold: float = 1.0) -> None:
         """
         Clip (in place) the boxes by limiting x coordinates to the range [0, width]
         and y coordinates to the range [0, height].
@@ -343,7 +343,7 @@ class RotatedBoxes(Boxes):
     def __repr__(self) -> str:
         return "RotatedBoxes(" + str(self.tensor) + ")"
 
-    def inside_box(self, box_size: Boxes.BoxSizeType, boundary_threshold: int = 0) -> torch.Tensor:
+    def inside_box(self, box_size: Tuple[int, int], boundary_threshold: int = 0) -> torch.Tensor:
         """
         Args:
             box_size (height, width): Size of the reference box covering

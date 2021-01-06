@@ -1,6 +1,4 @@
 _BASE_: "pg_rcnn_base.yaml"
-MODEL:
-  WEIGHTS: "model_final_a6e10b.pkl"
 DATASETS:
   TRAIN_VIDEO_IDS: [1,2,3]
   TEST_VIDEO_IDS: [0]
